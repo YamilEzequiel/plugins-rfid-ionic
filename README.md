@@ -35,3 +35,4 @@ echo(options: { value: string; }) => Promise<{ value: string; }>
 --------------------
 
 </docgen-api>
+# plugins-rfid-ionic
