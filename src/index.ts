@@ -1,10 +1,8 @@
 import { registerPlugin } from '@capacitor/core';
 
-import type { RFIDPlugin } from './definitions';
+import type { RFIDPluginPlugin } from './definitions';
 
-const RFID = registerPlugin<RFIDPlugin>('RFID', {
-  web: () => import('./web').then((m) => new m.RFIDWeb()),
-});
+const RFIDPlugin = registerPlugin<RFIDPluginPlugin>('RFIDPlugin');
 
 export * from './definitions';
-export { RFID };
+export { RFIDPlugin };
