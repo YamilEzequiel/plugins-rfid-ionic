@@ -1,6 +1,6 @@
 # capacitor-plugin-rfid
 
-Capacitor plugin for UHF RFID reading
+Capacitor plugin for UHF RFID reading, specifically designed for Chainway C72 devices.
 
 ## Install
 
@@ -17,6 +17,8 @@ npx cap sync
 * [`startReading()`](#startreading)
 * [`stopReading()`](#stopreading)
 * [`setPower(...)`](#setpower)
+* [`getPower()`](#getpower)
+* [`setFrequencyRegion(...)`](#setfrequencyregion)
 * [`free()`](#free)
 * [`getInventoryTag()`](#getinventorytag)
 
@@ -27,12 +29,12 @@ npx cap sync
 ### initialize()
 
 ```typescript
-initialize() => Promise<{ success: boolean }>
+initialize() => Promise<{ success: boolean; message?: string }>
 ```
 
 Initializes the RFID reader.
 
-**Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+**Returns:** <code>Promise&lt;{ success: boolean; message?: string }&gt;</code>
 
 --------------------
 
@@ -42,9 +44,12 @@ Initializes the RFID reader.
 startReading() => Promise<{ success: boolean }>
 ```
 
-Starts continuous RFID tag reading.
+Starts continuous RFID tag reading. The plugin will emit 'tagRead' events when tags are detected.
 
 **Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+
+**Events:** 
+- 'tagRead': `{ epc: string; rssi: string }`
 
 --------------------
 
@@ -63,16 +68,44 @@ Stops RFID tag reading.
 ### setPower(...)
 
 ```typescript
-setPower(options: { power: number }) => Promise<{ success: boolean }>
+setPower(options: { power: number }) => Promise<{ success: boolean; power: number }>
 ```
 
 Sets the RFID reader power.
 
 | Param         | Type                            | Description |
 | ------------- | ------------------------------- | ----------- |
-| **`options`** | <code>{ power: number }</code> | Power value (default: 15) |
+| **`options`** | <code>{ power: number }</code> | Power value (5-33 dBm) |
 
-**Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+**Returns:** <code>Promise&lt;{ success: boolean; power: number }&gt;</code>
+
+--------------------
+
+### getPower()
+
+```typescript
+getPower() => Promise<{ success: boolean; power: number }>
+```
+
+Gets the current power setting of the RFID reader.
+
+**Returns:** <code>Promise&lt;{ success: boolean; power: number }&gt;</code>
+
+--------------------
+
+### setFrequencyRegion(...)
+
+```typescript
+setFrequencyRegion(options: { area: number }) => Promise<{ success: boolean; area: number }>
+```
+
+Sets the frequency region for the RFID reader.
+
+| Param         | Type                           | Description |
+| ------------- | ------------------------------ | ----------- |
+| **`options`** | <code>{ area: number }</code> | Region value: 1 (China), 2 (USA), 3 (Europe), 4 (India), 5 (Korea), 6 (Japan) |
+
+**Returns:** <code>Promise&lt;{ success: boolean; area: number }&gt;</code>
 
 --------------------
 
@@ -108,22 +141,46 @@ Gets the information of the last read tag from the buffer.
 import { RFIDUHF } from 'capacitor-plugin-rfid';
 
 // Initialize the reader
-await RFIDUHF.initialize();
+const initResult = await RFIDUHF.initialize();
+console.log('Initialization:', initResult.success);
 
-// Set power
+// Set power (5-33 dBm)
 await RFIDUHF.setPower({ power: 20 });
+
+// Set frequency region (USA)
+await RFIDUHF.setFrequencyRegion({ area: 2 });
+
+// Listen for tag reads
+window.addEventListener('tagRead', (event: any) => {
+  console.log('Tag EPC:', event.detail.epc);
+  console.log('Tag RSSI:', event.detail.rssi);
+});
 
 // Start reading
 await RFIDUHF.startReading();
 
-// Get read tags
+// Get read tags manually
 const tagInfo = await RFIDUHF.getInventoryTag();
-console.log('EPC:', tagInfo.epc);
-console.log('RSSI:', tagInfo.rssi);
+if (tagInfo.success) {
+  console.log('EPC:', tagInfo.epc);
+  console.log('RSSI:', tagInfo.rssi);
+}
 
 // Stop reading
 await RFIDUHF.stopReading();
 
-// Free resources
+// Free resources when done
 await RFIDUHF.free();
 ```
+
+## Notes
+
+- This plugin is specifically designed for Chainway C72 devices with UHF RFID capabilities
+- Power range is 5-33 dBm
+- Supported frequency regions:
+  - 1: China (920-925 MHz)
+  - 2: USA (902-928 MHz)
+  - 3: Europe (865-867 MHz)
+  - 4: India (865-867 MHz)
+  - 5: Korea (917-923.5 MHz)
+  - 6: Japan (916.8-920.8 MHz)

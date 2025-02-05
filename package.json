@@ -1,6 +1,6 @@
 {
   "name": "capacitor-plugin-rfid",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Read RFID",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -27,7 +27,8 @@
   "keywords": [
     "capacitor",
     "plugin",
-    "native"
+    "native",
+    "rfid"
   ],
   "scripts": {
     "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
