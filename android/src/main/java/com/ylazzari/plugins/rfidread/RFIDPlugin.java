@@ -40,41 +40,59 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-    @PluginMethod
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void startReading(PluginCall call) {
         try {
             if (mReader != null && !loopStarted) {
+                // Asegurarse de que el lector esté inicializado
+                if (!mReader.init()) {
+                    call.reject("Error al inicializar el lector RFID");
+                    return;
+                }
+                
                 loopStarted = true;
-                mReader.startInventoryTag();
+                boolean success = mReader.startInventoryTag();
+                if (!success) {
+                    loopStarted = false;
+                    call.reject("Error al iniciar la lectura del RFID");
+                    return;
+                }
+                
                 startAsyncTask(10);
+                
                 JSObject ret = new JSObject();
                 ret.put("success", true);
+                ret.put("message", "Lectura RFID iniciada correctamente");
                 call.resolve(ret);
             } else {
                 call.reject("El lector ya está en funcionamiento o no está inicializado");
             }
         } catch (Exception e) {
-            call.reject("Error starting RFID reader", e);
+            loopStarted = false;
+            call.reject("Error al iniciar el lector RFID: " + e.getMessage());
         }
     }
 
-    @PluginMethod
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void stopReading(PluginCall call) {
         try {
             if (mReader != null && loopStarted) {
-                mReader.stopInventory();
+                boolean success = mReader.stopInventory();
                 if (asyncTask != null) {
                     asyncTask.cancel(true);
+                    asyncTask = null;
                 }
                 loopStarted = false;
+                
                 JSObject ret = new JSObject();
-                ret.put("success", true);
+                ret.put("success", success);
+                ret.put("message", success ? "Lectura detenida correctamente" : "Error al detener la lectura");
                 call.resolve(ret);
             } else {
                 call.reject("El lector no está en funcionamiento");
             }
         } catch (Exception e) {
-            call.reject("Error stopping RFID reader", e);
+            call.reject("Error al detener el lector RFID: " + e.getMessage());
         }
     }
 
@@ -182,20 +200,31 @@ public class RFIDPlugin extends Plugin {
             @Override
             protected Void doInBackground(Integer... integers) {
                 while (loopStarted) {
-                    UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
-                    if (tagInfo != null) {
-                        String epc = tagInfo.getEPC();
-                        if (epc != null && !epc.matches("[0]+")) {
-                            if (lastEpc == null || !lastEpc.equalsIgnoreCase(epc)) {
-                                notifyListeners("tagRead", createTagResult(epc, String.valueOf(tagInfo.getRssi())));
-                                lastEpc = epc;
+                    try {
+                        UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
+                        if (tagInfo != null) {
+                            String epc = tagInfo.getEPC();
+                            if (epc != null && !epc.matches("[0]+")) {
+                                if (lastEpc == null || !lastEpc.equalsIgnoreCase(epc)) {
+                                    JSObject tagData = new JSObject();
+                                    tagData.put("epc", epc);
+                                    tagData.put("rssi", tagInfo.getRssi());
+                                    
+                                    // Notificar en el hilo principal
+                                    getActivity().runOnUiThread(() -> {
+                                        notifyListeners("tagFound", tagData);
+                                    });
+                                    
+                                    lastEpc = epc;
+                                }
                             }
                         }
-                    }
-                    try {
                         Thread.sleep(integers[0]);
                     } catch (InterruptedException e) {
                         break;
+                    } catch (Exception e) {
+                        // Log error pero continuar el loop
+                        e.printStackTrace();
                     }
                 }
                 return null;
