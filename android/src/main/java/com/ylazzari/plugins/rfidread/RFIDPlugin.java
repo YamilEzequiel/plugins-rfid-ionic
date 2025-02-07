@@ -12,6 +12,7 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.provider.Settings;
 import android.view.KeyEvent;
+import android.annotation.SuppressLint;
 
 @CapacitorPlugin(name = "RFIDUHF")
 public class RFIDPlugin extends Plugin {
@@ -41,19 +42,23 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-
-
+    @SuppressLint("HardwareIds")
     @PluginMethod
-    public void getDeviceId(com.getcapacitor.PluginCall call) {
-      Context context = getContext();
-      String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
-      JSObject result = new JSObject();
-      result.put("id", androidId);
-      call.resolve(result);
+    public void getDeviceId(PluginCall call) {
+        try {
+            Context context = getContext();
+            String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+            JSObject result = new JSObject();
+            result.put("id", androidId != null ? androidId : "");
+            result.put("success", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            JSObject result = new JSObject();
+            result.put("success", false);
+            result.put("message", "Error obteniendo Android ID: " + e.getMessage());
+            call.reject("Error obteniendo Android ID", e);
+        }
     }
-
-
-
 
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void startReading(PluginCall call) {
@@ -281,8 +286,6 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-
-
     // 📌 Método para capturar teclas presionadas
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
@@ -304,5 +307,4 @@ public class RFIDPlugin extends Plugin {
         }
         return false;
     }
-
 }
