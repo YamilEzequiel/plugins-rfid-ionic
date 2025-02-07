@@ -44,7 +44,7 @@ public class RFIDPlugin extends Plugin {
 
 
     @PluginMethod
-    public void getAndroidId(com.getcapacitor.PluginCall call) {
+    public void getDeviceId(com.getcapacitor.PluginCall call) {
       Context context = getContext();
       String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
       JSObject result = new JSObject();
