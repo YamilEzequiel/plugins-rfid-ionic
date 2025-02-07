@@ -80,4 +80,24 @@ export interface RFIDPluginPlugin {
     eventName: 'initSuccess' | 'initError' | 'triggerPressed' | 'triggerReleased',
     listenerFunc: (data: { message: string }) => void
   ): Promise<void>;
+
+  /**
+   * Event emitted when the trigger button is pressed
+   * Trigger button codes: 139, 280, or 293
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'triggerPressed',
+    listenerFunc: (data: { message: string }) => void
+  ): Promise<void>;
+
+  /**
+   * Event emitted when the trigger button is released
+   * Trigger button codes: 139, 280, or 293
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'triggerReleased',
+    listenerFunc: (data: { message: string }) => void
+  ): Promise<void>;
 }

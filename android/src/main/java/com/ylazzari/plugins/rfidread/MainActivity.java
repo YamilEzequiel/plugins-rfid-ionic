@@ -1,26 +1,28 @@
 package com.ylazzari.plugins.rfidread;
 
-import android.util.Log;
 import android.view.KeyEvent;
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.Bridge;
-import com.ylazzari.plugins.rfidread.RFIDPlugin;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginHandle;
 
 public class MainActivity extends BridgeActivity {
   @Override
   public boolean dispatchKeyEvent(KeyEvent event) {
-    if (event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.ACTION_UP) {
-      String state = (event.getAction() == KeyEvent.ACTION_DOWN) ? "pressed" : "released";
-      int keyCode = event.getKeyCode();
-      String keyName = KeyEvent.keyCodeToString(keyCode);
+    // Obtener la instancia del plugin RFIDUHF usando el método correcto
+    Plugin plugin = getBridge().getPlugin("RFIDUHF").getInstance();
+    
+    if (plugin != null && plugin instanceof RFIDPlugin) {
+      RFIDPlugin rfidPlugin = (RFIDPlugin) plugin;
       
-      JSObject data = new JSObject();
-      data.put("state", state);
-      data.put("keyCode", keyCode);
-      data.put("keyName", keyName);
-      
-      notifyListeners("keyEvent", data);
+      // Delegar el evento al plugin según sea ACTION_DOWN o ACTION_UP
+      if (event.getAction() == KeyEvent.ACTION_DOWN) {
+        return rfidPlugin.onKeyDown(event.getKeyCode(), event);
+      } else if (event.getAction() == KeyEvent.ACTION_UP) {
+        return rfidPlugin.onKeyUp(event.getKeyCode(), event);
+      }
     }
+    
     return super.dispatchKeyEvent(event);
   }
 }

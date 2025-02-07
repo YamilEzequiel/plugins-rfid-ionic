@@ -316,6 +316,40 @@ export class RFIDService {
 }
 ```
 
+### Trigger Events
+The plugin automatically handles the device's trigger button events. These events are fired when:
+- The trigger button (key codes 139, 280, or 293) is pressed or released
+- The events are captured through the Android KeyEvent system
+
+**Example of handling trigger events:**
+```typescript
+// Listen for trigger press
+RFIDPluginPlugin.addListener('triggerPressed', (data) => {
+  console.log('Trigger pressed:', data.message);
+  // Usually you would start reading here
+  RFIDPluginPlugin.startReading();
+});
+
+// Listen for trigger release
+RFIDPluginPlugin.addListener('triggerReleased', (data) => {
+  console.log('Trigger released:', data.message);
+  // Usually you would stop reading here
+  RFIDPluginPlugin.stopReading();
+});
+```
+
+**Implementation details:**
+- The trigger events are handled at the Android native level through MainActivity
+- The plugin captures specific key codes (139, 280, 293) that correspond to the device's trigger button
+- Events are propagated to the JavaScript layer through Capacitor's event system
+- No manual configuration is needed - the events are automatically captured when the plugin is installed
+
+**Best practices:**
+- Set up trigger listeners early in your application lifecycle
+- Handle both press and release events for complete control
+- Consider implementing error handling for failed read attempts
+- Clean up listeners when they're no longer needed
+
 ## Notes
 
 - This plugin is specifically designed for Chainway C72 devices with UHF RFID capabilities
