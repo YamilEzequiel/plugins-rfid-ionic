@@ -64,6 +64,15 @@ export interface RFIDPluginPlugin {
   ): Promise<void>;
 
   /**
+   * Evento emitido cuando se presiona o libera una tecla
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'keyEvent',
+    listenerFunc: (data: { state: string, keyCode: number, keyName: string }) => void
+  ): Promise<void>;
+
+  /**
    * Eventos emitidos durante la inicialización y triggers
    * @since 1.0.0
    */

@@ -13,12 +13,11 @@ npx cap sync
 
 <docgen-index>
 
-* [`initialize()`](#initialize)
+* [`initReader()`](#initreader)
 * [`startReading()`](#startreading)
 * [`stopReading()`](#stopreading)
 * [`setPower(...)`](#setpower)
 * [`getPower()`](#getpower)
-* [`setFrequencyRegion(...)`](#setfrequencyregion)
 * [`free()`](#free)
 * [`getInventoryTag()`](#getinventorytag)
 * [`addListener(...)`](#addlistener)
@@ -27,42 +26,77 @@ npx cap sync
 
 <docgen-api>
 
-### initialize()
+### initReader()
 
 ```typescript
-initialize() => Promise<{ success: boolean; message?: string }>
+initReader() => Promise<{ success: boolean; message: string }>
 ```
 
 Initializes the RFID reader.
 
-**Returns:** <code>Promise&lt;{ success: boolean; message?: string }&gt;</code>
+**Returns:** <code>Promise&lt;{ success: boolean; message: string }&gt;</code>
+
+**Example:**
+```typescript
+import { RFIDPluginPlugin } from 'capacitor-plugin-rfid';
+
+async initReader() {
+  try {
+    const result = await RFIDPluginPlugin.initReader();
+    console.log('Reader initialized:', result.message);
+  } catch (error) {
+    console.error('Initialization error:', error);
+  }
+}
+```
 
 --------------------
 
 ### startReading()
 
 ```typescript
-startReading() => Promise<{ success: boolean }>
+startReading() => Promise<{ success: boolean; message: string }>
 ```
 
-Starts continuous RFID tag reading. The plugin will emit 'tagRead' events when tags are detected.
+Starts continuous RFID tag reading.
 
-**Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+**Returns:** <code>Promise&lt;{ success: boolean; message: string }&gt;</code>
 
-**Events:** 
-- 'tagRead': `{ epc: string; rssi: string }`
+**Example:**
+```typescript
+async startRFIDScan() {
+  try {
+    const result = await RFIDPluginPlugin.startReading();
+    console.log('RFID scanning:', result.message);
+  } catch (error) {
+    console.error('Error starting scan:', error);
+  }
+}
+```
 
 --------------------
 
 ### stopReading()
 
 ```typescript
-stopReading() => Promise<{ success: boolean }>
+stopReading() => Promise<{ success: boolean; message: string }>
 ```
 
 Stops RFID tag reading.
 
-**Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+**Returns:** <code>Promise&lt;{ success: boolean; message: string }&gt;</code>
+
+**Example:**
+```typescript
+async stopRFIDScan() {
+  try {
+    const result = await RFIDPluginPlugin.stopReading();
+    console.log('RFID scanning stopped:', result.message);
+  } catch (error) {
+    console.error('Error stopping scan:', error);
+  }
+}
+```
 
 --------------------
 
@@ -72,13 +106,23 @@ Stops RFID tag reading.
 setPower(options: { power: number }) => Promise<{ success: boolean; power: number }>
 ```
 
-Sets the RFID reader power.
+Sets the RFID reader power level (5-30 dBm).
 
 | Param         | Type                            | Description |
 | ------------- | ------------------------------- | ----------- |
-| **`options`** | <code>{ power: number }</code> | Power value (5-33 dBm) |
+| **`options`** | <code>{ power: number }</code> | Power value (5-30 dBm) |
 
-**Returns:** <code>Promise&lt;{ success: boolean; power: number }&gt;</code>
+**Example:**
+```typescript
+async setReaderPower(power: number) {
+  try {
+    const result = await RFIDPluginPlugin.setPower({ power });
+    console.log('Power set to:', result.power);
+  } catch (error) {
+    console.error('Error setting power:', error);
+  }
+}
+```
 
 --------------------
 
@@ -90,23 +134,17 @@ getPower() => Promise<{ success: boolean; power: number }>
 
 Gets the current power setting of the RFID reader.
 
-**Returns:** <code>Promise&lt;{ success: boolean; power: number }&gt;</code>
-
---------------------
-
-### setFrequencyRegion(...)
-
+**Example:**
 ```typescript
-setFrequencyRegion(options: { area: number }) => Promise<{ success: boolean; area: number }>
+async getCurrentPower() {
+  try {
+    const result = await RFIDPluginPlugin.getPower();
+    console.log('Current power:', result.power);
+  } catch (error) {
+    console.error('Error getting power:', error);
+  }
+}
 ```
-
-Sets the frequency region for the RFID reader.
-
-| Param         | Type                           | Description |
-| ------------- | ------------------------------ | ----------- |
-| **`options`** | <code>{ area: number }</code> | Region value: 1 (China), 2 (USA), 3 (Europe), 4 (India), 5 (Korea), 6 (Japan) |
-
-**Returns:** <code>Promise&lt;{ success: boolean; area: number }&gt;</code>
 
 --------------------
 
@@ -118,120 +156,162 @@ free() => Promise<{ success: boolean }>
 
 Releases RFID reader resources.
 
-**Returns:** <code>Promise&lt;{ success: boolean }&gt;</code>
+**Example:**
+```typescript
+async releaseReader() {
+  try {
+    const result = await RFIDPluginPlugin.free();
+    console.log('Reader resources released:', result.success);
+  } catch (error) {
+    console.error('Error releasing reader:', error);
+  }
+}
+```
 
 --------------------
 
 ### getInventoryTag()
 
 ```typescript
-getInventoryTag() => Promise<{ epc?: string; rssi?: string; success?: boolean; message?: string }>
+getInventoryTag() => Promise<{ epc?: string; rssi?: string; success: boolean; message?: string }>
 ```
 
 Gets the information of the last read tag from the buffer.
 
-**Returns:** <code>Promise&lt;{ epc?: string; rssi?: string; success?: boolean; message?: string }&gt;</code>
+**Example:**
+```typescript
+async getLastTag() {
+  try {
+    const tag = await RFIDPluginPlugin.getInventoryTag();
+    if (tag.success) {
+      console.log('Tag EPC:', tag.epc);
+      console.log('Tag RSSI:', tag.rssi);
+    }
+  } catch (error) {
+    console.error('Error getting tag:', error);
+  }
+}
+```
 
 --------------------
 
 ### addListener(...)
 
 ```typescript
-addListener(eventName: string, callback: Function) => Promise<void>
+addListener(eventName: string, listenerFunc: Function) => Promise<void>
 ```
 
 Adds a listener for various RFID events.
 
 Available events:
 - 'tagFound': Emitted when a new tag is found
-- 'triggerPressed': Emitted when the physical trigger is pressed
-- 'triggerReleased': Emitted when the physical trigger is released
+- 'keyEvent': Emitted when any key is pressed/released
 - 'initSuccess': Emitted when the reader is successfully initialized
 - 'initError': Emitted when there's an error during initialization
+- 'triggerPressed': Emitted when the trigger button is pressed
+- 'triggerReleased': Emitted when the trigger button is released
 
-| Event | Callback Data |
-| ----- | ------------ |
-| 'tagFound' | `{ epc: string; rssi: string }` |
-| 'triggerPressed' | `{ message: string }` |
-| 'triggerReleased' | `{ message: string }` |
-| 'initSuccess' | `{ message: string }` |
-| 'initError' | `{ message: string }` |
-
-</docgen-api>
-
-## Usage Example
-
+Event Types:
 ```typescript
-import { RFIDUHF } from 'capacitor-plugin-rfid';
+// Tag Found Event
+interface TagFoundEvent {
+  epc: string;
+  rssi: string;
+}
 
-// Initialize the reader
-const initResult = await RFIDUHF.initialize();
-console.log('Initialization:', initResult.success);
+// Key Event
+interface KeyEvent {
+  state: string;
+  keyCode: number;
+  keyName: string;
+}
 
-// Listen for trigger events
-RFIDUHF.addListener('triggerPressed', (data) => {
-  console.log('Trigger pressed:', data.message);
-  // Start reading when trigger is pressed
-  RFIDUHF.startReading();
-});
+// Init and Trigger Events
+interface MessageEvent {
+  message: string;
+}
+```
 
-RFIDUHF.addListener('triggerReleased', (data) => {
-  console.log('Trigger released:', data.message);
-  // Stop reading when trigger is released
-  RFIDUHF.stopReading();
-});
-
-// Listen for tag reads
-RFIDUHF.addListener('tagFound', (tag) => {
-  console.log('Tag EPC:', tag.epc);
-  console.log('Tag RSSI:', tag.rssi);
-});
-
-// Listen for initialization events
-RFIDUHF.addListener('initSuccess', (data) => {
-  console.log('Init success:', data.message);
-});
-
-RFIDUHF.addListener('initError', (data) => {
-  console.log('Init error:', data.message);
-});
-
-// Example using Angular/Ionic Service
+**Example using Angular/Ionic Service:**
+```typescript
 @Injectable({
   providedIn: 'root'
 })
 export class RFIDService {
   constructor() {
-    this.initializeRFID();
+    this.setupListeners();
   }
 
-  async initializeRFID() {
-    await RFIDUHF.initialize();
-    
-    RFIDUHF.addListener('triggerPressed', async () => {
-      await this.startScanning();
+  private async setupListeners() {
+    // Initialize reader
+    await RFIDPluginPlugin.initReader();
+
+    // Listen for key events
+    RFIDPluginPlugin.addListener('keyEvent', (data: KeyEvent) => {
+      console.log(`Key ${data.keyName} (${data.keyCode}) ${data.state}`);
     });
 
-    RFIDUHF.addListener('triggerReleased', async () => {
-      await this.stopScanning();
+    // Listen for trigger events
+    RFIDPluginPlugin.addListener('triggerPressed', (data: MessageEvent) => {
+      this.startScanning();
+      console.log('Trigger pressed:', data.message);
     });
 
-    RFIDUHF.addListener('tagFound', (tag) => {
-      this.processTag(tag);
+    RFIDPluginPlugin.addListener('triggerReleased', (data: MessageEvent) => {
+      this.stopScanning();
+      console.log('Trigger released:', data.message);
+    });
+
+    // Listen for tags
+    RFIDPluginPlugin.addListener('tagFound', (tag: TagFoundEvent) => {
+      console.log('Tag found:', tag.epc, 'RSSI:', tag.rssi);
+    });
+
+    // Listen for initialization events
+    RFIDPluginPlugin.addListener('initSuccess', (data: MessageEvent) => {
+      console.log('Reader initialized:', data.message);
+    });
+
+    RFIDPluginPlugin.addListener('initError', (data: MessageEvent) => {
+      console.error('Initialization error:', data.message);
     });
   }
 
   private async startScanning() {
-    await RFIDUHF.startReading();
+    await RFIDPluginPlugin.startReading();
   }
 
   private async stopScanning() {
-    await RFIDUHF.stopReading();
+    await RFIDPluginPlugin.stopReading();
   }
 
-  private processTag(tag: { epc: string; rssi: string }) {
-    // Process the tag data
-    console.log('Tag procesado:', tag);
+  // Example of complete workflow
+  async completeWorkflow() {
+    try {
+      // Initialize
+      await RFIDPluginPlugin.initReader();
+      
+      // Set power to 20 dBm
+      await RFIDPluginPlugin.setPower({ power: 20 });
+      
+      // Start reading
+      await RFIDPluginPlugin.startReading();
+      
+      // Wait for 5 seconds
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Stop reading
+      await RFIDPluginPlugin.stopReading();
+      
+      // Get last tag
+      const lastTag = await RFIDPluginPlugin.getInventoryTag();
+      console.log('Last tag read:', lastTag);
+      
+      // Free resources
+      await RFIDPluginPlugin.free();
+    } catch (error) {
+      console.error('Workflow error:', error);
+    }
   }
 }
 ```
@@ -239,12 +319,9 @@ export class RFIDService {
 ## Notes
 
 - This plugin is specifically designed for Chainway C72 devices with UHF RFID capabilities
-- Power range is 5-33 dBm
-- The physical trigger (F4 button) can be used to control reading
-- Supported frequency regions:
-  - 1: China (920-925 MHz)
-  - 2: USA (902-928 MHz)
-  - 3: Europe (865-867 MHz)
-  - 4: India (865-867 MHz)
-  - 5: Korea (917-923.5 MHz)
-  - 6: Japan (916.8-920.8 MHz)
+- Power range is 5-30 dBm
+- Key events are captured for all device buttons
+- The plugin automatically handles trigger button events (keyCode 139, 280, or 293)
+- All async operations return a Promise with a success indicator and relevant data
+- Event listeners should be set up early in the application lifecycle
+- Remember to free resources when done using the reader

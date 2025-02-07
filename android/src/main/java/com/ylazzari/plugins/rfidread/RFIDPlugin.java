@@ -16,7 +16,7 @@ public class RFIDPlugin extends Plugin {
     private boolean loopStarted = false;
     private AsyncTask<Integer, String, Void> asyncTask = null;
 
-    // Constantes para configuración
+    // Constantes para configuraciónte
     private static final int DEFAULT_POWER = 30;
     private static final int MIN_POWER = 5;
     private static final int MAX_POWER = 30;
@@ -36,16 +36,6 @@ public class RFIDPlugin extends Plugin {
         } catch (Exception e) {
             notifyListeners("initError", new JSObject().put("message", "Error: " + e.getMessage()));
         }
-
-        // 🔹 REGISTRAR EVENTOS DE TECLAS AL CARGAR EL PLUGIN 🔹
-        getActivity().getWindow().getDecorView().setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                return onKeyDown(keyCode, event);
-            } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                return onKeyUp(keyCode, event);
-            }
-            return false;
-        });
     }
 
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
@@ -274,14 +264,6 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
-            notifyListeners("triggerPressed", new JSObject().put("message", "Gatillo presionado"));
-            return true;
-        }
-        return super.onKeyDown(keyCode, event);
-    }
 
 
     // 📌 Método para capturar teclas presionadas
