@@ -9,6 +9,9 @@ import com.rscja.deviceapi.RFIDWithUHFUART;
 import com.rscja.deviceapi.entity.UHFTAGInfo;
 import android.os.AsyncTask;
 import android.app.ProgressDialog;
+import android.view.KeyEvent;
+import com.rscja.deviceapi.IKeyEventCallback;
+import com.rscja.deviceapi.interfaces.IKeyEventCallback;
 
 @CapacitorPlugin(name = "RFIDUHF")
 public class RFIDPlugin extends Plugin {
@@ -26,16 +29,30 @@ public class RFIDPlugin extends Plugin {
         try {
             mReader = RFIDWithUHFUART.getInstance();
             if (mReader != null) {
-                // Inicializar sin PluginCall ya que load() es un método del ciclo de vida
                 boolean result = mReader.init();
                 if (!result) {
                     notifyListeners("initError", new JSObject().put("message", "Fallo en la inicialización del lector"));
                 } else {
+                    // Agregar el listener del gatillo
+                    mReader.setKeyEventCallback(new IKeyEventCallback() {
+                        @Override
+                        public void onKeyDown(int keyCode) {
+                            if (keyCode == KeyEvent.KEYCODE_F4) {
+                                notifyListeners("triggerPressed", new JSObject().put("message", "Gatillo presionado"));
+                            }
+                        }
+
+                        @Override
+                        public void onKeyUp(int keyCode) {
+                            if (keyCode == KeyEvent.KEYCODE_F4) {
+                                notifyListeners("triggerReleased", new JSObject().put("message", "Gatillo liberado"));
+                            }
+                        }
+                    });
                     notifyListeners("initSuccess", new JSObject().put("message", "Lector inicializado correctamente"));
                 }
             }
         } catch (Exception e) {
-            // Manejar el error de inicialización
             notifyListeners("initError", new JSObject().put("message", "Error: " + e.getMessage()));
         }
     }

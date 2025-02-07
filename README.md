@@ -21,6 +21,7 @@ npx cap sync
 * [`setFrequencyRegion(...)`](#setfrequencyregion)
 * [`free()`](#free)
 * [`getInventoryTag()`](#getinventorytag)
+* [`addListener(...)`](#addlistener)
 
 </docgen-index>
 
@@ -133,6 +134,29 @@ Gets the information of the last read tag from the buffer.
 
 --------------------
 
+### addListener(...)
+
+```typescript
+addListener(eventName: string, callback: Function) => Promise<void>
+```
+
+Adds a listener for various RFID events.
+
+Available events:
+- 'tagFound': Emitted when a new tag is found
+- 'triggerPressed': Emitted when the physical trigger is pressed
+- 'triggerReleased': Emitted when the physical trigger is released
+- 'initSuccess': Emitted when the reader is successfully initialized
+- 'initError': Emitted when there's an error during initialization
+
+| Event | Callback Data |
+| ----- | ------------ |
+| 'tagFound' | `{ epc: string; rssi: string }` |
+| 'triggerPressed' | `{ message: string }` |
+| 'triggerReleased' | `{ message: string }` |
+| 'initSuccess' | `{ message: string }` |
+| 'initError' | `{ message: string }` |
+
 </docgen-api>
 
 ## Usage Example
@@ -144,39 +168,79 @@ import { RFIDUHF } from 'capacitor-plugin-rfid';
 const initResult = await RFIDUHF.initialize();
 console.log('Initialization:', initResult.success);
 
-// Set power (5-33 dBm)
-await RFIDUHF.setPower({ power: 20 });
-
-// Set frequency region (USA)
-await RFIDUHF.setFrequencyRegion({ area: 2 });
-
-// Listen for tag reads
-window.addEventListener('tagRead', (event: any) => {
-  console.log('Tag EPC:', event.detail.epc);
-  console.log('Tag RSSI:', event.detail.rssi);
+// Listen for trigger events
+RFIDUHF.addListener('triggerPressed', (data) => {
+  console.log('Trigger pressed:', data.message);
+  // Start reading when trigger is pressed
+  RFIDUHF.startReading();
 });
 
-// Start reading
-await RFIDUHF.startReading();
+RFIDUHF.addListener('triggerReleased', (data) => {
+  console.log('Trigger released:', data.message);
+  // Stop reading when trigger is released
+  RFIDUHF.stopReading();
+});
 
-// Get read tags manually
-const tagInfo = await RFIDUHF.getInventoryTag();
-if (tagInfo.success) {
-  console.log('EPC:', tagInfo.epc);
-  console.log('RSSI:', tagInfo.rssi);
+// Listen for tag reads
+RFIDUHF.addListener('tagFound', (tag) => {
+  console.log('Tag EPC:', tag.epc);
+  console.log('Tag RSSI:', tag.rssi);
+});
+
+// Listen for initialization events
+RFIDUHF.addListener('initSuccess', (data) => {
+  console.log('Init success:', data.message);
+});
+
+RFIDUHF.addListener('initError', (data) => {
+  console.log('Init error:', data.message);
+});
+
+// Example using Angular/Ionic Service
+@Injectable({
+  providedIn: 'root'
+})
+export class RFIDService {
+  constructor() {
+    this.initializeRFID();
+  }
+
+  async initializeRFID() {
+    await RFIDUHF.initialize();
+    
+    RFIDUHF.addListener('triggerPressed', async () => {
+      await this.startScanning();
+    });
+
+    RFIDUHF.addListener('triggerReleased', async () => {
+      await this.stopScanning();
+    });
+
+    RFIDUHF.addListener('tagFound', (tag) => {
+      this.processTag(tag);
+    });
+  }
+
+  private async startScanning() {
+    await RFIDUHF.startReading();
+  }
+
+  private async stopScanning() {
+    await RFIDUHF.stopReading();
+  }
+
+  private processTag(tag: { epc: string; rssi: string }) {
+    // Process the tag data
+    console.log('Tag procesado:', tag);
+  }
 }
-
-// Stop reading
-await RFIDUHF.stopReading();
-
-// Free resources when done
-await RFIDUHF.free();
 ```
 
 ## Notes
 
 - This plugin is specifically designed for Chainway C72 devices with UHF RFID capabilities
 - Power range is 5-33 dBm
+- The physical trigger (F4 button) can be used to control reading
 - Supported frequency regions:
   - 1: China (920-925 MHz)
   - 2: USA (902-928 MHz)

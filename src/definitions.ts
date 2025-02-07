@@ -64,11 +64,11 @@ export interface RFIDPluginPlugin {
   ): Promise<void>;
 
   /**
-   * Eventos emitidos durante la inicialización
+   * Eventos emitidos durante la inicialización y triggers
    * @since 1.0.0
    */
   addListener(
-    eventName: 'initSuccess' | 'initError',
+    eventName: 'initSuccess' | 'initError' | 'triggerPressed' | 'triggerReleased',
     listenerFunc: (data: { message: string }) => void
   ): Promise<void>;
 }
