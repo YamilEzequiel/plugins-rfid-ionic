@@ -8,17 +8,14 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.rscja.deviceapi.RFIDWithUHFUART;
 import com.rscja.deviceapi.entity.UHFTAGInfo;
 import android.os.AsyncTask;
-import android.app.ProgressDialog;
 import android.view.KeyEvent;
-import com.rscja.deviceapi.IKeyEventCallback;
-import com.rscja.deviceapi.interfaces.IKeyEventCallback;
 
 @CapacitorPlugin(name = "RFIDUHF")
 public class RFIDPlugin extends Plugin {
     private RFIDWithUHFUART mReader = null;
     private boolean loopStarted = false;
     private AsyncTask<Integer, String, Void> asyncTask = null;
-    
+
     // Constantes para configuración
     private static final int DEFAULT_POWER = 30;
     private static final int MIN_POWER = 5;
@@ -33,28 +30,22 @@ public class RFIDPlugin extends Plugin {
                 if (!result) {
                     notifyListeners("initError", new JSObject().put("message", "Fallo en la inicialización del lector"));
                 } else {
-                    // Agregar el listener del gatillo
-                    mReader.setKeyEventCallback(new IKeyEventCallback() {
-                        @Override
-                        public void onKeyDown(int keyCode) {
-                            if (keyCode == KeyEvent.KEYCODE_F4) {
-                                notifyListeners("triggerPressed", new JSObject().put("message", "Gatillo presionado"));
-                            }
-                        }
-
-                        @Override
-                        public void onKeyUp(int keyCode) {
-                            if (keyCode == KeyEvent.KEYCODE_F4) {
-                                notifyListeners("triggerReleased", new JSObject().put("message", "Gatillo liberado"));
-                            }
-                        }
-                    });
                     notifyListeners("initSuccess", new JSObject().put("message", "Lector inicializado correctamente"));
                 }
             }
         } catch (Exception e) {
             notifyListeners("initError", new JSObject().put("message", "Error: " + e.getMessage()));
         }
+
+        // 🔹 REGISTRAR EVENTOS DE TECLAS AL CARGAR EL PLUGIN 🔹
+        getActivity().getWindow().getDecorView().setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                return onKeyDown(keyCode, event);
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                return onKeyUp(keyCode, event);
+            }
+            return false;
+        });
     }
 
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
@@ -66,7 +57,7 @@ public class RFIDPlugin extends Plugin {
                     call.reject("Error al inicializar el lector RFID");
                     return;
                 }
-                
+
                 loopStarted = true;
                 boolean success = mReader.startInventoryTag();
                 if (!success) {
@@ -74,9 +65,9 @@ public class RFIDPlugin extends Plugin {
                     call.reject("Error al iniciar la lectura del RFID");
                     return;
                 }
-                
+
                 startAsyncTask(10);
-                
+
                 JSObject ret = new JSObject();
                 ret.put("success", true);
                 ret.put("message", "Lectura RFID iniciada correctamente");
@@ -100,7 +91,7 @@ public class RFIDPlugin extends Plugin {
                     asyncTask = null;
                 }
                 loopStarted = false;
-                
+
                 JSObject ret = new JSObject();
                 ret.put("success", success);
                 ret.put("message", success ? "Lectura detenida correctamente" : "Error al detener la lectura");
@@ -153,7 +144,7 @@ public class RFIDPlugin extends Plugin {
     public void setPower(PluginCall call) {
         try {
             int power = call.getInt("power", DEFAULT_POWER);
-            
+
             // Validar rango de potencia
             if (power < MIN_POWER || power > MAX_POWER) {
                 call.reject("Potencia debe estar entre " + MIN_POWER + " y " + MAX_POWER);
@@ -191,15 +182,13 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-
-
     @PluginMethod
     public void initReader(PluginCall call) {
         try {
             if (mReader == null) {
                 mReader = RFIDWithUHFUART.getInstance();
             }
-            
+
             if (mReader != null) {
                 new InitTask(call).execute();
             } else {
@@ -226,12 +215,12 @@ public class RFIDPlugin extends Plugin {
                                     JSObject tagData = new JSObject();
                                     tagData.put("epc", epc);
                                     tagData.put("rssi", tagInfo.getRssi());
-                                    
+
                                     // Notificar en el hilo principal
                                     getActivity().runOnUiThread(() -> {
                                         notifyListeners("tagFound", tagData);
                                     });
-                                    
+
                                     lastEpc = epc;
                                 }
                             }
@@ -284,4 +273,37 @@ public class RFIDPlugin extends Plugin {
             }
         }
     }
+
+
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
+            notifyListeners("triggerPressed", new JSObject().put("message", "Gatillo presionado"));
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+
+    // 📌 Método para capturar teclas presionadas
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
+            JSObject data = new JSObject();
+            data.put("message", "Gatillo presionado");
+            notifyListeners("triggerPressed", data);
+            return true;
+        }
+        return false;
+    }
+
+    // 📌 Método para capturar teclas liberadas
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
+            JSObject data = new JSObject();
+            data.put("message", "Gatillo liberado");
+            notifyListeners("triggerReleased", data);
+            return true;
+        }
+        return false;
+    }
+
 } 
