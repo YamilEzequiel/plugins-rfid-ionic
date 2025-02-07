@@ -21,6 +21,13 @@ export interface RFIDPluginPlugin {
   stopReading(): Promise<{ success: boolean, message: string }>;
 
   /**
+   * Obtiene el ID del dispositivo.
+   * @returns Promise con el ID del dispositivo
+   * @since 1.0.0
+   */
+  getDeviceId(): Promise<{ success: boolean, id: string }>;
+
+  /**
    * Configura la potencia del lector RFID.
    * @param options Objeto con la potencia a configurar (5-30)
    * @returns Promise con el resultado de la configuración

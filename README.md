@@ -21,6 +21,7 @@ npx cap sync
 * [`free()`](#free)
 * [`getInventoryTag()`](#getinventorytag)
 * [`addListener(...)`](#addlistener)
+* [`getDeviceId()`](#getdeviceid)
 
 </docgen-index>
 
@@ -315,6 +316,18 @@ export class RFIDService {
   }
 }
 ```
+
+--------------------
+
+### getDeviceId()
+
+```typescript
+getDeviceId() => Promise<{ success: boolean, id: string }>
+```
+
+Gets the device ID.
+
+--------------------
 
 ### Trigger Events
 The plugin automatically handles the device's trigger button events. These events are fired when:

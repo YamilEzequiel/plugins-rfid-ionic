@@ -7,7 +7,10 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.rscja.deviceapi.RFIDWithUHFUART;
 import com.rscja.deviceapi.entity.UHFTAGInfo;
+
+import android.content.Context;
 import android.os.AsyncTask;
+import android.provider.Settings;
 import android.view.KeyEvent;
 
 @CapacitorPlugin(name = "RFIDUHF")
@@ -37,6 +40,20 @@ public class RFIDPlugin extends Plugin {
             notifyListeners("initError", new JSObject().put("message", "Error: " + e.getMessage()));
         }
     }
+
+
+
+    @PluginMethod
+    public void getAndroidId(com.getcapacitor.PluginCall call) {
+      Context context = getContext();
+      String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+      JSObject result = new JSObject();
+      result.put("id", androidId);
+      call.resolve(result);
+    }
+
+
+
 
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void startReading(PluginCall call) {
@@ -288,4 +305,4 @@ public class RFIDPlugin extends Plugin {
         return false;
     }
 
-} 
+}
