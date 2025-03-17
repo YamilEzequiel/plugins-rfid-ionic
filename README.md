@@ -2,12 +2,18 @@
 
 Capacitor plugin for UHF RFID reading, specifically designed for Chainway C72 devices.
 
+[![Downloads](https://img.shields.io/npm/dt/capacitor-plugin-rfid.svg)](http://npmjs.com/package/capacitor-plugin-rfid)
+
 ## Install
 
 ```bash
 npm install capacitor-plugin-rfid
 npx cap sync
 ```
+
+## Example Ionic - Angular  
+
+https://github.com/YamilEzequiel/rfid-ionic-example
 
 ## API
 
