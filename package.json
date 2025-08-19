@@ -1,6 +1,6 @@
 {
   "name": "capacitor-plugin-rfid",
-  "version": "0.0.19",
+  "version": "0.0.22",
   "description": "Read RFID",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",

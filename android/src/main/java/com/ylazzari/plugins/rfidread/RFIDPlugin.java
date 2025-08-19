@@ -98,29 +98,57 @@ public class RFIDPlugin extends Plugin {
             call.reject("Error al iniciar el lector RFID: " + e.getMessage());
         }
     }
+    
 
-    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
-    public void stopReading(PluginCall call) {
-        try {
-            if (mReader != null && loopStarted) {
-                boolean success = mReader.stopInventory();
-                if (asyncTask != null) {
-                    asyncTask.cancel(true);
-                    asyncTask = null;
-                }
-                loopStarted = false;
-
-                JSObject ret = new JSObject();
-                ret.put("success", success);
-                ret.put("message", success ? "Lectura detenida correctamente" : "Error al detener la lectura");
-                call.resolve(ret);
-            } else {
-                call.reject("El lector no está en funcionamiento");
+@PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+public void stopReading(PluginCall call) {
+    try {
+        if (mReader != null && loopStarted) {
+            // Primero marcar que debe parar
+            loopStarted = false;
+            
+            // Cancelar la tarea asíncrona ANTES de parar el inventario
+            if (asyncTask != null && !asyncTask.isCancelled()) {
+                asyncTask.cancel(true);
+                asyncTask = null;
             }
-        } catch (Exception e) {
-            call.reject("Error al detener el lector RFID: " + e.getMessage());
+            
+            // Esperar un poco para que la tarea termine
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            // Parar el inventario
+            boolean success = mReader.stopInventory();
+            
+            // Limpiar el buffer múltiples veces para asegurar que esté vacío
+            for (int i = 0; i < 5; i++) {
+                try {
+                    mReader.readTagFromBuffer(); // Leer y descartar
+                } catch (Exception e) {
+                    // Ignorar errores, solo queremos limpiar
+                }
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("success", success);
+            ret.put("message", success ? "Lectura detenida correctamente" : "Error al detener la lectura");
+            call.resolve(ret);
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("success", false);
+            ret.put("message", "El lector no está en funcionamiento");
+            call.resolve(ret);
         }
+    } catch (Exception e) {
+        JSObject ret = new JSObject();
+        ret.put("success", false);
+        ret.put("message", "Error al detener el lector RFID: " + e.getMessage());
+        call.resolve(ret);
     }
+}
 
     @PluginMethod
     public void free(PluginCall call) {
@@ -138,23 +166,42 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
+ 
     @PluginMethod
     public void getInventoryTag(PluginCall call) {
         try {
             UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
+            JSObject ret = new JSObject();
             if (tagInfo != null) {
-                JSObject ret = new JSObject();
-                ret.put("epc", tagInfo.getEPC()); // Obtener EPC del objeto UHFTAGInfo
-                ret.put("rssi", tagInfo.getRssi()); // Obtener RSSI del objeto UHFTAGInfo
+                ret.put("epc", tagInfo.getEPC());
+                ret.put("rssi", tagInfo.getRssi());
+                ret.put("success", true);
                 call.resolve(ret);
             } else {
-                JSObject ret = new JSObject();
                 ret.put("success", false);
                 ret.put("message", "No hay tags en el buffer");
                 call.resolve(ret);
             }
         } catch (Exception e) {
             call.reject("Error leyendo tag del buffer", e);
+        }
+    }
+
+    @PluginMethod
+    public void setInventoryCallback(PluginCall call) {
+        try {
+            mReader.setInventoryCallback(new InventoryCallback() {
+                @Override
+                public void onInventoryTag(UHFTAGInfo tagInfo) {
+                    notifyListeners("tagFoundInventory", createTagResult(tagInfo.getEPC(), tagInfo.getRssi()));
+                }
+            });
+
+            mReader.startInventoryTag();
+            
+            call.resolve(new JSObject().put("success", true));
+        } catch (Exception e) {
+            call.reject("Error configurando callback de inventario", e);
         }
     }
 
@@ -236,34 +283,39 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-    private void startAsyncTask(int waitTime) {
-        asyncTask = new AsyncTask<Integer, String, Void>() {
-            String lastEpc = null;
-            long lastNotificationTime = 0;
-            private static final long NOTIFICATION_THROTTLE = 50; // 50ms throttle para notificaciones
+private void startAsyncTask(int waitTime) {
+    asyncTask = new AsyncTask<Integer, String, Void>() {
+        String lastEpc = null;
+        long lastNotificationTime = 0;
+        private static final long NOTIFICATION_THROTTLE = 50;
 
-            @Override
-            protected Void doInBackground(Integer... integers) {
-                int sleepTime = integers[0];
-                while (loopStarted && !isCancelled()) {
-                    try {
-                        UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
-                        if (tagInfo != null) {
-                            String epc = tagInfo.getEPC();
-                            if (epc != null && !epc.isEmpty() && !epc.matches("[0]+")) {
-                                // Solo notificar si es un tag diferente o ha pasado suficiente tiempo
-                                long currentTime = System.currentTimeMillis();
-                                boolean shouldNotify = lastEpc == null || 
-                                                     !lastEpc.equalsIgnoreCase(epc) ||
-                                                     (currentTime - lastNotificationTime > 1000); // Re-notificar el mismo tag cada segundo
-                                
-                                if (shouldNotify && (currentTime - lastNotificationTime > NOTIFICATION_THROTTLE)) {
+        @Override
+        protected Void doInBackground(Integer... integers) {
+            int sleepTime = integers[0];
+            while (loopStarted && !isCancelled()) {
+                try {
+                    // Verificar el estado más frecuentemente
+                    if (!loopStarted || isCancelled()) {
+                        break;
+                    }
+                    
+                    UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
+                    if (tagInfo != null && loopStarted && !isCancelled()) {
+                        String epc = tagInfo.getEPC();
+                        if (epc != null && !epc.isEmpty() && !epc.matches("[0]+")) {
+                            long currentTime = System.currentTimeMillis();
+                            boolean shouldNotify = lastEpc == null || 
+                                                 !lastEpc.equalsIgnoreCase(epc) ||
+                                                 (currentTime - lastNotificationTime > 1000);
+                            
+                            if (shouldNotify && (currentTime - lastNotificationTime > NOTIFICATION_THROTTLE)) {
+                                // Verificar nuevamente antes de notificar
+                                if (loopStarted && !isCancelled()) {
                                     JSObject tagData = new JSObject();
                                     tagData.put("epc", epc);
                                     tagData.put("rssi", tagInfo.getRssi());
                                     tagData.put("timestamp", currentTime);
 
-                                    // Notificar de manera asíncrona sin bloquear el hilo de lectura
                                     notifyListeners("tagFound", tagData);
                                     
                                     lastEpc = epc;
@@ -271,36 +323,52 @@ public class RFIDPlugin extends Plugin {
                                 }
                             }
                         }
-                        
-                        // Sleep adaptativo: menos tiempo si se están leyendo tags
-                        if (tagInfo != null) {
-                            Thread.sleep(Math.max(1, sleepTime / 2)); // Más rápido cuando hay actividad
-                        } else {
-                            Thread.sleep(sleepTime);
-                        }
-                    } catch (InterruptedException e) {
-                        break; // Salir del loop de manera limpia
-                    } catch (Exception e) {
-                        // Log error pero continuar el loop
-                        e.printStackTrace();
-                        try {
-                            Thread.sleep(sleepTime * 2); // Sleep más largo en caso de error
-                        } catch (InterruptedException ie) {
-                            break;
-                        }
+                    }
+                    
+                    // Verificar estado antes de dormir
+                    if (!loopStarted || isCancelled()) {
+                        break;
+                    }
+                    
+                    if (tagInfo != null) {
+                        Thread.sleep(Math.max(1, sleepTime / 2));
+                    } else {
+                        Thread.sleep(sleepTime);
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    if (!loopStarted || isCancelled()) {
+                        break;
+                    }
+                    try {
+                        Thread.sleep(sleepTime * 2);
+                    } catch (InterruptedException ie) {
+                        break;
                     }
                 }
-                return null;
             }
-            
-            @Override
-            protected void onCancelled() {
-                super.onCancelled();
-                // Cleanup cuando se cancela la tarea
+            return null;
+        }
+        
+        @Override
+        protected void onCancelled() {
+            super.onCancelled();
+            // Limpiar el buffer cuando se cancela
+            if (mReader != null) {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        mReader.readTagFromBuffer();
+                    }
+                } catch (Exception e) {
+                    // Ignorar errores
+                }
             }
-        };
-        asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, waitTime);
-    }
+        }
+    };
+    asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, waitTime);
+}
 
     private JSObject createTagResult(String epc, String rssi) {
         JSObject result = new JSObject();
@@ -336,6 +404,32 @@ public class RFIDPlugin extends Plugin {
             }
         }
     }
+
+    @PluginMethod
+public void clearBuffer(PluginCall call) {
+    try {
+        if (mReader != null) {
+            int cleared = 0;
+            for (int i = 0; i < 10; i++) {
+                UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
+                if (tagInfo == null) {
+                    break;
+                }
+                cleared++;
+            }
+            
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("cleared", cleared);
+            ret.put("message", "Buffer limpiado, " + cleared + " tags removidos");
+            call.resolve(ret);
+        } else {
+            call.reject("Lector no inicializado");
+        }
+    } catch (Exception e) {
+        call.reject("Error limpiando buffer", e);
+    }
+}
 
     // 📌 Método para capturar teclas presionadas con debounce y control de repetición
     public boolean onKeyDown(int keyCode, KeyEvent event) {

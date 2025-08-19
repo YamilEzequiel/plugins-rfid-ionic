@@ -212,6 +212,7 @@ Adds a listener for various RFID events.
 
 Available events:
 - 'tagFound': Emitted when a new tag is found
+- 'tagFoundInventory': Emitted when a new tag is found using the inventory callback
 - 'keyEvent': Emitted when any key is pressed/released
 - 'initSuccess': Emitted when the reader is successfully initialized
 - 'initError': Emitted when there's an error during initialization
@@ -222,6 +223,12 @@ Event Types:
 ```typescript
 // Tag Found Event
 interface TagFoundEvent {
+  epc: string;
+  rssi: string;
+}
+
+// Tag Found Inventory Event
+interface TagFoundInventoryEvent {
   epc: string;
   rssi: string;
 }
@@ -272,6 +279,11 @@ export class RFIDService {
     // Listen for tags
     RFIDPluginPlugin.addListener('tagFound', (tag: TagFoundEvent) => {
       console.log('Tag found:', tag.epc, 'RSSI:', tag.rssi);
+    });
+
+    // Listen for tags found using the inventory callback
+    RFIDPluginPlugin.addListener('tagFoundInventory', (tag: TagFoundInventoryEvent) => {
+      console.log('Tag found using inventory callback:', tag.epc, 'RSSI:', tag.rssi);
     });
 
     // Listen for initialization events
