@@ -62,12 +62,19 @@ export interface RFIDPluginPlugin {
   }>;
 
   /**
+   * Resetea el estado de las teclas en caso de problemas con eventos repetitivos.
+   * @returns Promise con el resultado del reseteo
+   * @since 1.0.0
+   */
+  resetKeyState(): Promise<{ success: boolean, message: string }>;
+
+  /**
    * Evento emitido cuando se encuentra un nuevo tag
    * @since 1.0.0
    */
   addListener(
     eventName: 'tagFound',
-    listenerFunc: (tag: { epc: string, rssi: string }) => void
+    listenerFunc: (tag: { epc: string, rssi: string, timestamp?: number }) => void
   ): Promise<void>;
 
   /**
@@ -95,7 +102,7 @@ export interface RFIDPluginPlugin {
    */
   addListener(
     eventName: 'triggerPressed',
-    listenerFunc: (data: { message: string }) => void
+    listenerFunc: (data: { message: string, keyCode?: number, timestamp?: number }) => void
   ): Promise<void>;
 
   /**
@@ -105,6 +112,24 @@ export interface RFIDPluginPlugin {
    */
   addListener(
     eventName: 'triggerReleased',
-    listenerFunc: (data: { message: string }) => void
+    listenerFunc: (data: { message: string, keyCode?: number, timestamp?: number }) => void
+  ): Promise<void>;
+
+  /**
+   * Event emitted when the trigger is auto-reset due to timeout
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'triggerAutoReset',
+    listenerFunc: (data: { message: string, reason: string }) => void
+  ): Promise<void>;
+
+  /**
+   * Event emitted when key state is manually reset
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'keyStateReset',
+    listenerFunc: (data: { message: string, success: boolean }) => void
   ): Promise<void>;
 }

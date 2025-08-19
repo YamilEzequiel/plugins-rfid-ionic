@@ -24,6 +24,12 @@ public class RFIDPlugin extends Plugin {
     private static final int DEFAULT_POWER = 30;
     private static final int MIN_POWER = 5;
     private static final int MAX_POWER = 30;
+    
+    // Variables para manejo de eventos de teclado
+    private long lastKeyEventTime = 0;
+    private static final long KEY_DEBOUNCE_DELAY = 300; // 300ms de debounce
+    private boolean isKeyPressed = false;
+    private static final long KEY_TIMEOUT = 5000; // 5 segundos timeout para auto-reset
 
     @Override
     public void load() {
@@ -78,7 +84,7 @@ public class RFIDPlugin extends Plugin {
                     return;
                 }
 
-                startAsyncTask(10);
+                startAsyncTask(5); // Reducir delay para mejor velocidad
 
                 JSObject ret = new JSObject();
                 ret.put("success", true);
@@ -211,41 +217,86 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void resetKeyState(PluginCall call) {
+        try {
+            // Resetear el estado de las teclas
+            isKeyPressed = false;
+            lastKeyEventTime = 0;
+            
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("message", "Estado de teclas reseteado correctamente");
+            call.resolve(ret);
+            
+            // Notificar que se ha reseteado el estado
+            notifyListeners("keyStateReset", ret);
+        } catch (Exception e) {
+            call.reject("Error reseteando estado de teclas", e);
+        }
+    }
+
     private void startAsyncTask(int waitTime) {
         asyncTask = new AsyncTask<Integer, String, Void>() {
             String lastEpc = null;
+            long lastNotificationTime = 0;
+            private static final long NOTIFICATION_THROTTLE = 50; // 50ms throttle para notificaciones
 
             @Override
             protected Void doInBackground(Integer... integers) {
-                while (loopStarted) {
+                int sleepTime = integers[0];
+                while (loopStarted && !isCancelled()) {
                     try {
                         UHFTAGInfo tagInfo = mReader.readTagFromBuffer();
                         if (tagInfo != null) {
                             String epc = tagInfo.getEPC();
-                            if (epc != null && !epc.matches("[0]+")) {
-                                if (lastEpc == null || !lastEpc.equalsIgnoreCase(epc)) {
+                            if (epc != null && !epc.isEmpty() && !epc.matches("[0]+")) {
+                                // Solo notificar si es un tag diferente o ha pasado suficiente tiempo
+                                long currentTime = System.currentTimeMillis();
+                                boolean shouldNotify = lastEpc == null || 
+                                                     !lastEpc.equalsIgnoreCase(epc) ||
+                                                     (currentTime - lastNotificationTime > 1000); // Re-notificar el mismo tag cada segundo
+                                
+                                if (shouldNotify && (currentTime - lastNotificationTime > NOTIFICATION_THROTTLE)) {
                                     JSObject tagData = new JSObject();
                                     tagData.put("epc", epc);
                                     tagData.put("rssi", tagInfo.getRssi());
+                                    tagData.put("timestamp", currentTime);
 
-                                    // Notificar en el hilo principal
-                                    getActivity().runOnUiThread(() -> {
-                                        notifyListeners("tagFound", tagData);
-                                    });
-
+                                    // Notificar de manera asíncrona sin bloquear el hilo de lectura
+                                    notifyListeners("tagFound", tagData);
+                                    
                                     lastEpc = epc;
+                                    lastNotificationTime = currentTime;
                                 }
                             }
                         }
-                        Thread.sleep(integers[0]);
+                        
+                        // Sleep adaptativo: menos tiempo si se están leyendo tags
+                        if (tagInfo != null) {
+                            Thread.sleep(Math.max(1, sleepTime / 2)); // Más rápido cuando hay actividad
+                        } else {
+                            Thread.sleep(sleepTime);
+                        }
                     } catch (InterruptedException e) {
-                        break;
+                        break; // Salir del loop de manera limpia
                     } catch (Exception e) {
                         // Log error pero continuar el loop
                         e.printStackTrace();
+                        try {
+                            Thread.sleep(sleepTime * 2); // Sleep más largo en caso de error
+                        } catch (InterruptedException ie) {
+                            break;
+                        }
                     }
                 }
                 return null;
+            }
+            
+            @Override
+            protected void onCancelled() {
+                super.onCancelled();
+                // Cleanup cuando se cancela la tarea
             }
         };
         asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, waitTime);
@@ -286,25 +337,75 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-    // 📌 Método para capturar teclas presionadas
+    // 📌 Método para capturar teclas presionadas con debounce y control de repetición
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Solo procesar códigos de teclas específicos del escáner RFID
         if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
-            JSObject data = new JSObject();
-            data.put("message", "Gatillo presionado");
-            notifyListeners("triggerPressed", data);
-            return true;
+            long currentTime = System.currentTimeMillis();
+            
+            // Auto-reset si la tecla ha estado presionada por mucho tiempo
+            if (isKeyPressed && (currentTime - lastKeyEventTime > KEY_TIMEOUT)) {
+                isKeyPressed = false;
+                JSObject resetData = new JSObject();
+                resetData.put("message", "Auto-reset: Gatillo liberado automáticamente");
+                resetData.put("reason", "timeout");
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        notifyListeners("triggerAutoReset", resetData);
+                    });
+                }
+            }
+            
+            // Ignorar eventos repetitivos (cuando se mantiene presionada la tecla)
+            if (event.getRepeatCount() > 0) {
+                return true; // Consumir el evento pero no procesarlo
+            }
+            
+            // Aplicar debounce para evitar eventos múltiples rápidos
+            if (currentTime - lastKeyEventTime < KEY_DEBOUNCE_DELAY) {
+                return true; // Consumir el evento pero no procesarlo
+            }
+            
+            // Solo procesar si la tecla no estaba ya presionada
+            if (!isKeyPressed) {
+                isKeyPressed = true;
+                lastKeyEventTime = currentTime;
+                
+                JSObject data = new JSObject();
+                data.put("message", "Gatillo presionado");
+                data.put("keyCode", keyCode);
+                data.put("timestamp", currentTime);
+                
+                // Notificar de manera asíncrona para mejor rendimiento
+                notifyListeners("triggerPressed", data);
+            }
+            return true; // Consumir el evento
         }
-        return false;
+        return false; // No consumir eventos de otras teclas
     }
 
-    // 📌 Método para capturar teclas liberadas
+    // 📌 Método para capturar teclas liberadas con control mejorado
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+        // Solo procesar códigos de teclas específicos del escáner RFID
         if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
-            JSObject data = new JSObject();
-            data.put("message", "Gatillo liberado");
-            notifyListeners("triggerReleased", data);
-            return true;
+            long currentTime = System.currentTimeMillis();
+            
+            // Solo procesar si la tecla estaba presionada
+            if (isKeyPressed) {
+                isKeyPressed = false;
+                lastKeyEventTime = currentTime;
+                
+                JSObject data = new JSObject();
+                data.put("message", "Gatillo liberado");
+                data.put("keyCode", keyCode);
+                data.put("timestamp", currentTime);
+                
+                // Notificar de manera asíncrona para mejor rendimiento
+                notifyListeners("triggerReleased", data);
+            }
+            return true; // Consumir el evento
         }
-        return false;
+        return false; // No consumir eventos de otras teclas
     }
 }
+
