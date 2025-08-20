@@ -212,14 +212,72 @@ export interface RFIDPluginPlugin {
   }>;
 
   /**
-   * Clears the internal memory of found tags during filtered reading.
-   * This allows the same tags to be detected again as "new" discoveries.
-   * @returns Promise with the result of clearing found tags
+   * Event emitted when any key is pressed or released
    * @since 1.0.0
    */
-  clearFoundTags(): Promise<{
+  addListener(
+    eventName: 'keyEvent',
+    listenerFunc: (data: { state: string; keyCode: number; keyName: string }) => void,
+  ): Promise<any>;
+
+  /**
+   * Event emitted when a tag is found using the inventory callback
+   * @since 1.0.0
+   */
+  addListener(
+    eventName: 'tagFoundInventory',
+    listenerFunc: (tag: { epc: string; rssi: string }) => void,
+  ): Promise<any>;
+
+  /**
+   * Simulates a key press for testing purposes
+   * @param options Object with keyCode to simulate (default: 293)
+   * @returns Promise with simulation result
+   * @since 1.0.0
+   */
+  simulateKeyPress(options?: { keyCode?: number }): Promise<{
     success: boolean;
-    cleared: number;
+    message: string;
+  }>;
+
+  /**
+   * Stops the InfoWedge monitoring system
+   * @returns Promise with stop result
+   * @since 1.0.0
+   */
+  stopInfoWedgeMonitoring(): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+
+  /**
+   * Checks if the accessibility service is enabled
+   * @returns Promise with accessibility status
+   * @since 1.0.0
+   */
+  checkAccessibilityPermission(): Promise<{
+    enabled: boolean;
+    success: boolean;
+    message: string;
+  }>;
+
+  /**
+   * Requests accessibility permission by opening settings
+   * @returns Promise with request result
+   * @since 1.0.0
+   */
+  requestAccessibilityPermission(): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+
+  /**
+   * Tests the complete key event flow for debugging
+   * @returns Promise with test result
+   * @since 1.0.0
+   */
+  testKeyEventFlow(): Promise<{
+    success: boolean;
     message: string;
   }>;
 }

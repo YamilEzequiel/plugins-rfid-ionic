@@ -26,6 +26,16 @@ import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
 
+import java.util.Timer;
+import java.util.TimerTask;
+import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import android.net.Uri;
+import android.database.Cursor;
+import android.provider.Settings;
+import android.content.Intent;
+import android.text.TextUtils;
+
 
 
 @CapacitorPlugin(name = "RFIDUHF")
@@ -53,6 +63,10 @@ public class RFIDPlugin extends Plugin {
     private static final long KEY_DEBOUNCE_DELAY = 300; // 300ms de debounce
     private boolean isKeyPressed = false;
     private static final long KEY_TIMEOUT = 5000; // 5 segundos timeout para auto-reset
+    
+    // InfoWedge monitoring
+    private Timer infowedgeMonitor;
+    private boolean lastInfoWedgeKeyState = false;
 
     @Override
     public void load() {
@@ -74,6 +88,14 @@ public class RFIDPlugin extends Plugin {
                 Log.e(TAG, "No se pudo obtener instancia del lector");
                 notifyListeners("initError", new JSObject().put("message", "No se pudo obtener instancia del lector"));
             }
+            
+            // Disable InfoWedge monitoring to reduce SELinux errors
+            // startInfoWedgeMonitoring(); // Commented out - causes SELinux errors
+            
+            // DIRECT REGISTRATION: Register this plugin directly with KeyEventManager
+            Log.i(TAG, "🔗 Registering RFIDPlugin directly with KeyEventManager");
+            KeyEventManager.getInstance().setRFIDPlugin(this);
+            
         } catch (Exception e) {
             Log.e(TAG, "Error en load(): " + e.getMessage(), e);
             notifyListeners("initError", new JSObject().put("message", "Error: " + e.getMessage()));
@@ -642,13 +664,17 @@ public class RFIDPlugin extends Plugin {
     public void handleKeyEventFromActivity(int keyCode, boolean isPressed) {
         try {
             long currentTime = System.currentTimeMillis();
+            
+            Log.d(TAG, "🔧 handleKeyEventFromActivity - KeyCode: " + keyCode + ", IsPressed: " + isPressed + ", CurrentTime: " + currentTime);
 
             // Solo procesar códigos de teclas específicos del escáner RFID
             if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
+                Log.d(TAG, "🎯 Processing trigger key: " + keyCode);
 
                 if (isPressed) {
                     // Auto-reset si la tecla ha estado presionada por mucho tiempo
                     if (isKeyPressed && (currentTime - lastKeyEventTime > KEY_TIMEOUT)) {
+                        Log.w(TAG, "⚠️ Auto-reset: Key was stuck, releasing it");
                         isKeyPressed = false;
                         JSObject resetData = new JSObject();
                         resetData.put("message", "Auto-reset: Gatillo liberado automáticamente");
@@ -658,6 +684,7 @@ public class RFIDPlugin extends Plugin {
 
                     // Aplicar debounce para evitar eventos múltiples rápidos
                     if (currentTime - lastKeyEventTime < KEY_DEBOUNCE_DELAY) {
+                        Log.d(TAG, "🔄 Debounce: Ignoring rapid key event");
                         return;
                     }
 
@@ -671,8 +698,10 @@ public class RFIDPlugin extends Plugin {
                         data.put("keyCode", keyCode);
                         data.put("timestamp", currentTime);
 
-                        Log.d(TAG, "Key pressed: " + keyCode);
+                        Log.d(TAG, "✅ Key pressed: " + keyCode + " - Notifying listeners");
                         notifyListeners("triggerPressed", data);
+                    } else {
+                        Log.d(TAG, "ℹ️ Key already pressed, ignoring duplicate press event");
                     }
                 } else {
                     // Solo procesar si la tecla estaba presionada
@@ -685,13 +714,337 @@ public class RFIDPlugin extends Plugin {
                         data.put("keyCode", keyCode);
                         data.put("timestamp", currentTime);
 
-                        Log.d(TAG, "Key released: " + keyCode);
+                        Log.d(TAG, "✅ Key released: " + keyCode + " - Notifying listeners");
                         notifyListeners("triggerReleased", data);
+                    } else {
+                        Log.d(TAG, "ℹ️ Key was not pressed, ignoring release event");
+                    }
+                }
+            } else {
+                Log.d(TAG, "ℹ️ Ignoring non-trigger key: " + keyCode);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "❌ Error handling key event from activity: " + e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
+    public void simulateKeyPress(PluginCall call) {
+        try {
+            int keyCode = call.getInt("keyCode", 293);
+            Log.d(TAG, "🧪 Simulating key press for testing - KeyCode: " + keyCode);
+            
+            // Simulate press
+            handleKeyEventFromActivity(keyCode, true);
+            
+            // Simulate release after a short delay
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                handleKeyEventFromActivity(keyCode, false);
+            }, 100);
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("message", "Key press simulated for keyCode: " + keyCode);
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Error simulating key press", e);
+        }
+    }
+
+    // ========== INFOWEDGE MONITORING SOLUTION ==========
+    
+    private void startInfoWedgeMonitoring() {
+        try {
+            Log.d(TAG, "🔍 Starting InfoWedge monitoring as fallback solution");
+            
+            if (infowedgeMonitor != null) {
+                infowedgeMonitor.cancel();
+            }
+            
+            infowedgeMonitor = new Timer("InfoWedgeMonitor");
+            infowedgeMonitor.scheduleAtFixedRate(new TimerTask() {
+                @Override
+                public void run() {
+                    checkInfoWedgeKeyState();
+                }
+            }, 0, 100); // Check every 100ms
+            
+        } catch (Exception e) {
+            Log.e(TAG, "❌ Error starting InfoWedge monitoring: " + e.getMessage(), e);
+        }
+    }
+    
+    private void checkInfoWedgeKeyState() {
+        try {
+            boolean currentKeyState = false;
+
+            // Method 1: Check system settings
+            currentKeyState = checkSystemKeySettings() || currentKeyState;
+
+            // Method 2: Use reflection to access InfoWedge internals
+            currentKeyState = checkInfoWedgeReflection() || currentKeyState;
+
+            // Method 3: Monitor content providers
+            currentKeyState = checkContentProviders() || currentKeyState;
+
+            // If state changed, trigger event
+            if (currentKeyState != lastInfoWedgeKeyState) {
+                Log.d(TAG, "🎯 InfoWedge key state changed: " + lastInfoWedgeKeyState + " -> " + currentKeyState);
+
+                lastInfoWedgeKeyState = currentKeyState;
+
+                final boolean keyStateForLambda = currentKeyState;
+                mainHandler.post(() -> {
+                    handleKeyEventFromActivity(293, keyStateForLambda);
+                });
+            }
+
+        } catch (Exception e) {
+            // Ignore errors in monitoring loop
+        }
+    }
+    
+    private boolean checkSystemKeySettings() {
+        try {
+            Context context = getContext();
+            if (context == null) return false;
+            
+            // Check various system settings that might indicate key state
+            String[] settingsKeys = {
+                "key_state_293",
+                "trigger_key_state",
+                "scanner_key_state",
+                "hardware_key_293"
+            };
+            
+            for (String key : settingsKeys) {
+                String value = android.provider.Settings.System.getString(
+                    context.getContentResolver(), key);
+                
+                if (value != null && (value.equals("1") || value.equals("true"))) {
+                    return true;
+                }
+            }
+            
+        } catch (Exception e) {
+            // Ignore
+        }
+        return false;
+    }
+    
+    private boolean checkInfoWedgeReflection() {
+        try {
+            // Try to access InfoWedge service via reflection
+            Class<?> serviceManagerClass = Class.forName("android.os.ServiceManager");
+            Method getServiceMethod = serviceManagerClass.getMethod("getService", String.class);
+            
+            String[] serviceNames = {
+                "infowedge",
+                "chainway_key",
+                "scanner_service",
+                "hardware_key"
+            };
+            
+            for (String serviceName : serviceNames) {
+                try {
+                    Object service = getServiceMethod.invoke(null, serviceName);
+                    if (service != null) {
+                        // Try to get key state from service
+                        Class<?> serviceClass = service.getClass();
+                        
+                        try {
+                            Method getKeyStateMethod = serviceClass.getMethod("getKeyState", int.class);
+                            Object result = getKeyStateMethod.invoke(service, 293);
+                            
+                            if (result instanceof Boolean) {
+                                return (Boolean) result;
+                            } else if (result instanceof Integer) {
+                                return ((Integer) result) == 1;
+                            }
+                        } catch (Exception e) {
+                            // Try alternative method names
+                            try {
+                                Method isKeyPressedMethod = serviceClass.getMethod("isKeyPressed", int.class);
+                                Object result = isKeyPressedMethod.invoke(service, 293);
+                                if (result instanceof Boolean) {
+                                    return (Boolean) result;
+                                }
+                            } catch (Exception e2) {
+                                // Continue to next service
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Continue to next service name
+                }
+            }
+            
+        } catch (Exception e) {
+            // Reflection not available or failed
+        }
+        return false;
+    }
+    
+    private boolean checkContentProviders() {
+        try {
+            Context context = getContext();
+            if (context == null) return false;
+            
+            String[] providerUris = {
+                "content://com.rscja.infowedge.keystate",
+                "content://com.chainway.key.provider/current",
+                "content://com.rscja.scanner.keystate/293"
+            };
+            
+            for (String uriString : providerUris) {
+                try {
+                    Uri uri = Uri.parse(uriString);
+                    Cursor cursor = context.getContentResolver().query(
+                        uri, null, "keycode=?", new String[]{"293"}, null);
+                    
+                    if (cursor != null) {
+                        if (cursor.moveToFirst()) {
+                            // Look for state column
+                            String[] stateColumns = {"state", "pressed", "value", "status"};
+                            
+                            for (String column : stateColumns) {
+                                try {
+                                    int columnIndex = cursor.getColumnIndex(column);
+                                    if (columnIndex >= 0) {
+                                        String value = cursor.getString(columnIndex);
+                                        if (value != null && (value.equals("1") || value.equals("true"))) {
+                                            cursor.close();
+                                            return true;
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    // Continue to next column
+                                }
+                            }
+                        }
+                        cursor.close();
+                    }
+                } catch (Exception e) {
+                    // Continue to next provider
+                }
+            }
+            
+        } catch (Exception e) {
+            // Ignore
+        }
+        return false;
+    }
+    
+    @PluginMethod
+    public void stopInfoWedgeMonitoring(PluginCall call) {
+        try {
+            if (infowedgeMonitor != null) {
+                infowedgeMonitor.cancel();
+                infowedgeMonitor = null;
+                Log.d(TAG, "✅ InfoWedge monitoring stopped");
+            }
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("message", "InfoWedge monitoring stopped");
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Error stopping InfoWedge monitoring", e);
+        }
+    }
+
+    @PluginMethod
+    public void checkAccessibilityPermission(PluginCall call) {
+        try {
+            boolean isEnabled = isAccessibilityServiceEnabled();
+            
+            JSObject result = new JSObject();
+            result.put("enabled", isEnabled);
+            result.put("success", true);
+            result.put("message", isEnabled ? "Accessibility service is enabled" : "Accessibility service is not enabled");
+            
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Error checking accessibility permission", e);
+        }
+    }
+
+    @PluginMethod
+    public void requestAccessibilityPermission(PluginCall call) {
+        try {
+            if (isAccessibilityServiceEnabled()) {
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("message", "Accessibility service is already enabled");
+                call.resolve(result);
+                return;
+            }
+
+            // Open accessibility settings
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            
+            getContext().startActivity(intent);
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("message", "Accessibility settings opened. Please enable the RFID Key Interceptor service.");
+            call.resolve(result);
+            
+        } catch (Exception e) {
+            call.reject("Error requesting accessibility permission", e);
+        }
+    }
+
+    private boolean isAccessibilityServiceEnabled() {
+        try {
+            String serviceName = getContext().getPackageName() + "/com.ylazzari.plugins.rfidread.KeyInterceptorService";
+            
+            String enabledServices = Settings.Secure.getString(
+                getContext().getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            );
+            
+            if (enabledServices != null) {
+                TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
+                splitter.setString(enabledServices);
+                
+                while (splitter.hasNext()) {
+                    String service = splitter.next();
+                    if (service.equals(serviceName)) {
+                        return true;
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error handling key event from activity: " + e.getMessage(), e);
+            Log.e(TAG, "Error checking accessibility service: " + e.getMessage(), e);
+        }
+        return false;
+    }
+
+    @PluginMethod
+    public void testKeyEventFlow(PluginCall call) {
+        try {
+            Log.i(TAG, "🧪 Testing complete key event flow");
+            
+            // Test 1: Direct KeyEventManager notification
+            KeyEventManager.getInstance().notifyKeyEvent(777, true);
+            
+            // Test 2: Simulate key press
+            handleKeyEventFromActivity(293, true);
+            
+            // Test 3: After delay, simulate release
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                handleKeyEventFromActivity(293, false);
+            }, 500);
+            
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("message", "Key event flow test executed - check logs");
+            call.resolve(result);
+            
+        } catch (Exception e) {
+            call.reject("Error testing key event flow", e);
         }
     }
 }

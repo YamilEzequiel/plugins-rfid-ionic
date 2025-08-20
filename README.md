@@ -49,11 +49,11 @@ Initializes the RFID reader.
 
 **Example:**
 ```typescript
-import { RFIDPluginPlugin } from 'capacitor-plugin-rfid';
+import { RFIDPlugin } from 'capacitor-plugin-rfid';
 
 async initReader() {
   try {
-    const result = await RFIDPluginPlugin.initReader();
+    const result = await RFIDPlugin.initReader();
     console.log('Reader initialized:', result.message);
   } catch (error) {
     console.error('Initialization error:', error);
@@ -77,7 +77,7 @@ Starts continuous RFID tag reading.
 ```typescript
 async startRFIDScan() {
   try {
-    const result = await RFIDPluginPlugin.startReading();
+    const result = await RFIDPlugin.startReading();
     console.log('RFID scanning:', result.message);
   } catch (error) {
     console.error('Error starting scan:', error);
@@ -101,7 +101,7 @@ Stops RFID tag reading.
 ```typescript
 async stopRFIDScan() {
   try {
-    const result = await RFIDPluginPlugin.stopReading();
+    const result = await RFIDPlugin.stopReading();
     console.log('RFID scanning stopped:', result.message);
   } catch (error) {
     console.error('Error stopping scan:', error);
@@ -141,7 +141,7 @@ async startFilteredScan() {
   ];
   
   try {
-    const result = await RFIDPluginPlugin.startFilteredReading({ targetTags });
+    const result = await RFIDPlugin.startFilteredReading({ targetTags });
     console.log('Filtered reading started:', result.message);
     console.log('Monitoring', result.targetCount, 'target tags');
   } catch (error) {
@@ -166,7 +166,7 @@ Stops filtered RFID reading and returns statistics about the session.
 ```typescript
 async stopFilteredScan() {
   try {
-    const result = await RFIDPluginPlugin.stopFilteredReading();
+    const result = await RFIDPlugin.stopFilteredReading();
     console.log('Filtered reading stopped:', result.message);
     console.log(`Found ${result.foundCount} of ${result.targetCount} target tags`);
   } catch (error) {
@@ -191,7 +191,7 @@ Gets the current status of the filtered reading session with real-time statistic
 ```typescript
 async checkFilteredStatus() {
   try {
-    const status = await RFIDPluginPlugin.getFilteredReadingStatus();
+    const status = await RFIDPlugin.getFilteredReadingStatus();
     console.log('Filtered reading running:', status.isRunning);
     console.log(`Progress: ${status.foundCount}/${status.targetCount} tags found`);
   } catch (error) {
@@ -216,7 +216,7 @@ Clears the internal memory of found tags during filtered reading. This allows th
 ```typescript
 async resetFoundTags() {
   try {
-    const result = await RFIDPluginPlugin.clearFoundTags();
+    const result = await RFIDPlugin.clearFoundTags();
     console.log('Found tags cleared:', result.message);
     console.log('Cleared', result.cleared, 'tags from memory');
   } catch (error) {
@@ -243,7 +243,7 @@ Sets the RFID reader power level (5-30 dBm).
 ```typescript
 async setReaderPower(power: number) {
   try {
-    const result = await RFIDPluginPlugin.setPower({ power });
+    const result = await RFIDPlugin.setPower({ power });
     console.log('Power set to:', result.power);
   } catch (error) {
     console.error('Error setting power:', error);
@@ -265,7 +265,7 @@ Gets the current power setting of the RFID reader.
 ```typescript
 async getCurrentPower() {
   try {
-    const result = await RFIDPluginPlugin.getPower();
+    const result = await RFIDPlugin.getPower();
     console.log('Current power:', result.power);
   } catch (error) {
     console.error('Error getting power:', error);
@@ -287,7 +287,7 @@ Releases RFID reader resources.
 ```typescript
 async releaseReader() {
   try {
-    const result = await RFIDPluginPlugin.free();
+    const result = await RFIDPlugin.free();
     console.log('Reader resources released:', result.success);
   } catch (error) {
     console.error('Error releasing reader:', error);
@@ -309,7 +309,7 @@ Gets the information of the last read tag from the buffer.
 ```typescript
 async getLastTag() {
   try {
-    const tag = await RFIDPluginPlugin.getInventoryTag();
+    const tag = await RFIDPlugin.getInventoryTag();
     if (tag.success) {
       console.log('Tag EPC:', tag.epc);
       console.log('Tag RSSI:', tag.rssi);
@@ -334,11 +334,13 @@ Available events:
 - 'tagFound': Emitted when a new tag is found during regular reading
 - 'filteredTagFound': Emitted when a target tag is found during filtered reading
 - 'tagFoundInventory': Emitted when a new tag is found using the inventory callback
-- 'keyEvent': Emitted when any key is pressed/released
+- 'keyEvent': Emitted when any key is pressed/released (all device keys)
 - 'initSuccess': Emitted when the reader is successfully initialized
 - 'initError': Emitted when there's an error during initialization
-- 'triggerPressed': Emitted when the trigger button is pressed
-- 'triggerReleased': Emitted when the trigger button is released
+- 'triggerPressed': Emitted when the trigger button is pressed (key codes 139, 280, 293)
+- 'triggerReleased': Emitted when the trigger button is released (key codes 139, 280, 293)
+- 'triggerAutoReset': Emitted when the trigger is auto-reset due to timeout
+- 'keyStateReset': Emitted when key state is manually reset
 
 Event Types:
 ```typescript
@@ -387,82 +389,82 @@ export class RFIDService {
 
   private async setupListeners() {
     // Initialize reader
-    await RFIDPluginPlugin.initReader();
+    await RFIDPlugin.initReader();
 
     // Listen for key events
-    RFIDPluginPlugin.addListener('keyEvent', (data: KeyEvent) => {
+    RFIDPlugin.addListener('keyEvent', (data: KeyEvent) => {
       console.log(`Key ${data.keyName} (${data.keyCode}) ${data.state}`);
     });
 
     // Listen for trigger events
-    RFIDPluginPlugin.addListener('triggerPressed', (data: MessageEvent) => {
+    RFIDPlugin.addListener('triggerPressed', (data: MessageEvent) => {
       this.startScanning();
       console.log('Trigger pressed:', data.message);
     });
 
-    RFIDPluginPlugin.addListener('triggerReleased', (data: MessageEvent) => {
+    RFIDPlugin.addListener('triggerReleased', (data: MessageEvent) => {
       this.stopScanning();
       console.log('Trigger released:', data.message);
     });
 
     // Listen for tags during regular reading
-    RFIDPluginPlugin.addListener('tagFound', (tag: TagFoundEvent) => {
+    RFIDPlugin.addListener('tagFound', (tag: TagFoundEvent) => {
       console.log('Tag found:', tag.epc, 'RSSI:', tag.rssi);
     });
 
     // Listen for target tags during filtered reading
-    RFIDPluginPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
+    RFIDPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
       console.log('Target tag found:', tag.epc, 'RSSI:', tag.rssi);
       // This will only fire once per unique target tag
     });
 
     // Listen for tags found using the inventory callback
-    RFIDPluginPlugin.addListener('tagFoundInventory', (tag: TagFoundInventoryEvent) => {
+    RFIDPlugin.addListener('tagFoundInventory', (tag: TagFoundInventoryEvent) => {
       console.log('Tag found using inventory callback:', tag.epc, 'RSSI:', tag.rssi);
     });
 
     // Listen for initialization events
-    RFIDPluginPlugin.addListener('initSuccess', (data: MessageEvent) => {
+    RFIDPlugin.addListener('initSuccess', (data: MessageEvent) => {
       console.log('Reader initialized:', data.message);
     });
 
-    RFIDPluginPlugin.addListener('initError', (data: MessageEvent) => {
+    RFIDPlugin.addListener('initError', (data: MessageEvent) => {
       console.error('Initialization error:', data.message);
     });
   }
 
   private async startScanning() {
-    await RFIDPluginPlugin.startReading();
+    await RFIDPlugin.startReading();
   }
 
   private async stopScanning() {
-    await RFIDPluginPlugin.stopReading();
+    await RFIDPlugin.stopReading();
   }
 
   // Example of complete workflow
   async completeWorkflow() {
     try {
       // Initialize
-      await RFIDPluginPlugin.initReader();
+      await RFIDPlugin.initReader();
       
       // Set power to 20 dBm
-      await RFIDPluginPlugin.setPower({ power: 20 });
+      await RFIDPlugin.setPower({ power: 20 });
       
       // Start reading
-      await RFIDPluginPlugin.startReading();
+      await RFIDPlugin.startReading();
       
       // Wait for 5 seconds
       await new Promise(resolve => setTimeout(resolve, 5000));
       
       // Stop reading
-      await RFIDPluginPlugin.stopReading();
+      await RFIDPlugin.stopReading();
       
       // Get last tag
-      const lastTag = await RFIDPluginPlugin.getInventoryTag();
+      const lastTag = await RFIDPlugin.getInventoryTag();
       console.log('Last tag read:', lastTag);
       
       // Free resources
-      await RFIDPluginPlugin.free();
+      await RFIDPlugin.free();
     } catch (error) {
       console.error('Workflow error:', error);
     }
@@ -490,17 +492,17 @@ The plugin automatically handles the device's trigger button events. These event
 **Example of handling trigger events:**
 ```typescript
 // Listen for trigger press
-RFIDPluginPlugin.addListener('triggerPressed', (data) => {
+RFIDPlugin.addListener('triggerPressed', (data) => {
   console.log('Trigger pressed:', data.message);
   // Usually you would start reading here
-  RFIDPluginPlugin.startReading();
+  RFIDPlugin.startReading();
 });
 
 // Listen for trigger release
-RFIDPluginPlugin.addListener('triggerReleased', (data) => {
+RFIDPlugin.addListener('triggerReleased', (data) => {
   console.log('Trigger released:', data.message);
   // Usually you would stop reading here
-  RFIDPluginPlugin.stopReading();
+  RFIDPlugin.stopReading();
 });
 ```
 
@@ -509,12 +511,367 @@ RFIDPluginPlugin.addListener('triggerReleased', (data) => {
 - The plugin captures specific key codes (139, 280, 293) that correspond to the device's trigger button
 - Events are propagated to the JavaScript layer through Capacitor's event system
 - No manual configuration is needed - the events are automatically captured when the plugin is installed
+- Key events include debounce protection (300ms) and auto-reset timeout (5 seconds)
 
 **Best practices:**
 - Set up trigger listeners early in your application lifecycle
 - Handle both press and release events for complete control
 - Consider implementing error handling for failed read attempts
 - Clean up listeners when they're no longer needed
+- Use `resetKeyState()` if you encounter sticky key states
+
+## Ionic Angular Implementation Guide
+
+### Step 1: Install the Plugin
+
+```bash
+npm install capacitor-plugin-rfid
+npx cap sync android
+```
+
+### Step 2: Create an RFID Service
+
+```typescript
+// src/app/services/rfid.service.ts
+import { Injectable } from '@angular/core';
+import { RFIDPlugin } from 'capacitor-plugin-rfid';
+import { BehaviorSubject } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class RfidService {
+  private isInitialized = new BehaviorSubject<boolean>(false);
+  private foundTags = new BehaviorSubject<any[]>([]);
+  private isScanning = new BehaviorSubject<boolean>(false);
+
+  constructor() {
+    this.initializePlugin();
+  }
+
+  async initializePlugin() {
+    try {
+      const result = await RFIDPlugin.initReader();
+      console.log('RFID Plugin initialized:', result.message);
+      this.isInitialized.next(result.success);
+      this.setupListeners();
+    } catch (error) {
+      console.error('Error initializing RFID plugin:', error);
+      this.isInitialized.next(false);
+    }
+  }
+
+  private async setupListeners() {
+    // Listen for trigger events
+    RFIDPlugin.addListener('triggerPressed', (data) => {
+      console.log('Trigger pressed:', data.message);
+      this.startScanning();
+    });
+
+    RFIDPlugin.addListener('triggerReleased', (data) => {
+      console.log('Trigger released:', data.message);
+      this.stopScanning();
+    });
+
+    // Listen for tags
+    RFIDPlugin.addListener('tagFound', (tag) => {
+      console.log('Tag found:', tag.epc, 'RSSI:', tag.rssi);
+      this.addFoundTag(tag);
+    });
+
+    // Listen for filtered tags
+    RFIDPlugin.addListener('filteredTagFound', (tag) => {
+      console.log('Target tag found:', tag.epc, 'RSSI:', tag.rssi);
+      this.addFoundTag(tag);
+    });
+
+    // Error handling
+    RFIDPlugin.addListener('initError', (data) => {
+      console.error('RFID Init Error:', data.message);
+    });
+  }
+
+  async startScanning() {
+    try {
+      const result = await RFIDPlugin.startReading();
+      console.log('Scanning started:', result.message);
+      this.isScanning.next(true);
+      return result;
+    } catch (error) {
+      console.error('Error starting scan:', error);
+      this.isScanning.next(false);
+      throw error;
+    }
+  }
+
+  async stopScanning() {
+    try {
+      const result = await RFIDPlugin.stopReading();
+      console.log('Scanning stopped:', result.message);
+      this.isScanning.next(false);
+      return result;
+    } catch (error) {
+      console.error('Error stopping scan:', error);
+      throw error;
+    }
+  }
+
+  async startFilteredScanning(targetTags: string[]) {
+    try {
+      const result = await RFIDPlugin.startFilteredReading({ targetTags });
+      console.log('Filtered scanning started:', result.message);
+      this.isScanning.next(true);
+      return result;
+    } catch (error) {
+      console.error('Error starting filtered scan:', error);
+      this.isScanning.next(false);
+      throw error;
+    }
+  }
+
+  async setPower(power: number) {
+    try {
+      const result = await RFIDPlugin.setPower({ power });
+      console.log('Power set to:', result.power);
+      return result;
+    } catch (error) {
+      console.error('Error setting power:', error);
+      throw error;
+    }
+  }
+
+  async resetKeyState() {
+    try {
+      const result = await RFIDPlugin.resetKeyState();
+      console.log('Key state reset:', result.message);
+      return result;
+    } catch (error) {
+      console.error('Error resetting key state:', error);
+      throw error;
+    }
+  }
+
+  private addFoundTag(tag: any) {
+    const currentTags = this.foundTags.value;
+    const exists = currentTags.find(t => t.epc === tag.epc);
+    if (!exists) {
+      this.foundTags.next([...currentTags, tag]);
+    }
+  }
+
+  // Observables for components
+  get isInitialized$() { return this.isInitialized.asObservable(); }
+  get foundTags$() { return this.foundTags.asObservable(); }
+  get isScanning$() { return this.isScanning.asObservable(); }
+
+  clearFoundTags() {
+    this.foundTags.next([]);
+  }
+}
+```
+
+### Step 3: Use in Your Component
+
+```typescript
+// src/app/pages/scanner/scanner.page.ts
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { RfidService } from '../../services/rfid.service';
+import { Observable, Subscription } from 'rxjs';
+
+@Component({
+  selector: 'app-scanner',
+  templateUrl: './scanner.page.html',
+  styleUrls: ['./scanner.page.scss'],
+})
+export class ScannerPage implements OnInit, OnDestroy {
+  isInitialized$: Observable<boolean>;
+  foundTags$: Observable<any[]>;
+  isScanning$: Observable<boolean>;
+  
+  private subscriptions: Subscription[] = [];
+  power = 20;
+  targetTags: string[] = [];
+
+  constructor(private rfidService: RfidService) {
+    this.isInitialized$ = this.rfidService.isInitialized$;
+    this.foundTags$ = this.rfidService.foundTags$;
+    this.isScanning$ = this.rfidService.isScanning$;
+  }
+
+  ngOnInit() {
+    // Component initialization
+  }
+
+  ngOnDestroy() {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+  }
+
+  async onStartScan() {
+    try {
+      await this.rfidService.startScanning();
+    } catch (error) {
+      console.error('Error starting scan:', error);
+    }
+  }
+
+  async onStopScan() {
+    try {
+      await this.rfidService.stopScanning();
+    } catch (error) {
+      console.error('Error stopping scan:', error);
+    }
+  }
+
+  async onStartFilteredScan() {
+    if (this.targetTags.length === 0) {
+      console.warn('No target tags specified');
+      return;
+    }
+    
+    try {
+      await this.rfidService.startFilteredScanning(this.targetTags);
+    } catch (error) {
+      console.error('Error starting filtered scan:', error);
+    }
+  }
+
+  async onSetPower() {
+    try {
+      await this.rfidService.setPower(this.power);
+    } catch (error) {
+      console.error('Error setting power:', error);
+    }
+  }
+
+  onClearTags() {
+    this.rfidService.clearFoundTags();
+  }
+
+  async onResetKeyState() {
+    try {
+      await this.rfidService.resetKeyState();
+    } catch (error) {
+      console.error('Error resetting key state:', error);
+    }
+  }
+
+  addTargetTag(tag: string) {
+    if (tag.trim() && !this.targetTags.includes(tag.trim())) {
+      this.targetTags.push(tag.trim());
+    }
+  }
+
+  removeTargetTag(index: number) {
+    this.targetTags.splice(index, 1);
+  }
+}
+```
+
+### Step 4: Template Example
+
+```html
+<!-- src/app/pages/scanner/scanner.page.html -->
+<ion-header>
+  <ion-toolbar>
+    <ion-title>RFID Scanner</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="isInitialized$ | async; else notInitialized">
+    
+    <!-- Power Control -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Power Control</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-item>
+          <ion-label>Power (5-30 dBm)</ion-label>
+          <ion-input type="number" [(ngModel)]="power" min="5" max="30"></ion-input>
+          <ion-button slot="end" (click)="onSetPower()">Set</ion-button>
+        </ion-item>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Scanning Controls -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Scanning</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-button expand="block" (click)="onStartScan()" [disabled]="isScanning$ | async">
+          Start Scanning
+        </ion-button>
+        <ion-button expand="block" (click)="onStopScan()" [disabled]="!(isScanning$ | async)">
+          Stop Scanning
+        </ion-button>
+        <ion-button expand="block" fill="outline" (click)="onResetKeyState()">
+          Reset Key State
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Filtered Scanning -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Filtered Scanning</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-item>
+          <ion-label position="stacked">Target Tags</ion-label>
+          <ion-textarea [(ngModel)]="newTargetTag" placeholder="Enter EPC tags (one per line)"></ion-textarea>
+        </ion-item>
+        <ion-button expand="block" (click)="onStartFilteredScan()" [disabled]="isScanning$ | async">
+          Start Filtered Scan
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Found Tags -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Found Tags
+          <ion-button size="small" fill="clear" (click)="onClearTags()">Clear</ion-button>
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list *ngIf="(foundTags$ | async)?.length > 0; else noTags">
+          <ion-item *ngFor="let tag of foundTags$ | async">
+            <ion-label>
+              <h3>{{ tag.epc }}</h3>
+              <p>RSSI: {{ tag.rssi }}</p>
+              <p *ngIf="tag.timestamp">{{ tag.timestamp | date:'medium' }}</p>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+        <ng-template #noTags>
+          <p>No tags found yet...</p>
+        </ng-template>
+      </ion-card-content>
+    </ion-card>
+
+  </div>
+
+  <ng-template #notInitialized>
+    <ion-card>
+      <ion-card-content>
+        <p>RFID Plugin is not initialized. Please check your device and try again.</p>
+      </ion-card-content>
+    </ion-card>
+  </ng-template>
+</ion-content>
+```
+
+**Important Notes for Ionic Implementation:**
+
+1. **Permissions**: Make sure your Android app has the necessary permissions in `android/app/src/main/AndroidManifest.xml`
+2. **Device Support**: This plugin is specifically designed for Chainway C72 devices
+3. **Lifecycle**: Initialize the RFID service early in your app lifecycle (preferably in a service)
+4. **Error Handling**: Always wrap RFID operations in try-catch blocks
+5. **Memory Management**: Clear found tags and stop scanning when leaving the page
+6. **Key Events**: The trigger button events are automatically handled - you just need to listen for them
 
 ## Performance Optimization: When to Use Each Reading Method
 
@@ -554,21 +911,21 @@ export class OptimizedRFIDService {
   }
 
   private async setupFilteredListeners() {
-    await RFIDPluginPlugin.initReader();
+    await RFIDPlugin.initReader();
 
     // Listen only for target tags
-    RFIDPluginPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
+    RFIDPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
       console.log('Target tag discovered:', tag.epc);
       this.foundTags.add(tag.epc);
       this.processFoundTag(tag);
     });
 
     // Setup trigger events for filtered reading
-    RFIDPluginPlugin.addListener('triggerPressed', () => {
+    RFIDPlugin.addListener('triggerPressed', () => {
       this.startFilteredScan();
     });
 
-    RFIDPluginPlugin.addListener('triggerReleased', () => {
+    RFIDPlugin.addListener('triggerReleased', () => {
       this.stopFilteredScan();
     });
   }
@@ -578,7 +935,7 @@ export class OptimizedRFIDService {
     this.foundTags.clear();
     
     try {
-      const result = await RFIDPluginPlugin.startFilteredReading({ 
+      const result = await RFIDPlugin.startFilteredReading({ 
         targetTags: this.targetTags 
       });
       console.log(`Started scanning for ${result.targetCount} target tags`);
@@ -588,7 +945,7 @@ export class OptimizedRFIDService {
   }
 
   async getInventoryResults() {
-    const status = await RFIDPluginPlugin.getFilteredReadingStatus();
+    const status = await RFIDPlugin.getFilteredReadingStatus();
     const missing = this.targetTags.filter(tag => !this.foundTags.has(tag));
     
     return {

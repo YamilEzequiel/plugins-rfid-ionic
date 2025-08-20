@@ -47,7 +47,7 @@ export class RFIDPluginWeb extends WebPlugin implements RFIDPluginPlugin {
     throw this.unimplemented('Not implemented on web.');
   }
 
-  async startFilteredReading(): Promise<{ success: boolean; message: string; targetCount: number }> {
+  async startFilteredReading(options: { targetTags: string[] }): Promise<{ success: boolean; message: string; targetCount: number }> {
     throw this.unimplemented('Not implemented on web.');
   }
 
@@ -60,6 +60,26 @@ export class RFIDPluginWeb extends WebPlugin implements RFIDPluginPlugin {
   }
 
   async clearFoundTags(): Promise<{ success: boolean; cleared: number; message: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  async simulateKeyPress(options?: { keyCode?: number }): Promise<{ success: boolean; message: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  async stopInfoWedgeMonitoring(): Promise<{ success: boolean; message: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  async checkAccessibilityPermission(): Promise<{ enabled: boolean; success: boolean; message: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  async requestAccessibilityPermission(): Promise<{ success: boolean; message: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  async testKeyEventFlow(): Promise<{ success: boolean; message: string }> {
     throw this.unimplemented('Not implemented on web.');
   }
 }
