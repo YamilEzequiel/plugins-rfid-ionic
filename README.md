@@ -22,6 +22,10 @@ https://github.com/YamilEzequiel/rfid-ionic-example
 * [`initReader()`](#initreader)
 * [`startReading()`](#startreading)
 * [`stopReading()`](#stopreading)
+* [`startFilteredReading(...)`](#startfilteredreading)
+* [`stopFilteredReading()`](#stopfilteredreading)
+* [`getFilteredReadingStatus()`](#getfilteredreadingstatus)
+* [`clearFoundTags()`](#clearfoundtags)
 * [`setPower(...)`](#setpower)
 * [`getPower()`](#getpower)
 * [`free()`](#free)
@@ -101,6 +105,122 @@ async stopRFIDScan() {
     console.log('RFID scanning stopped:', result.message);
   } catch (error) {
     console.error('Error stopping scan:', error);
+  }
+}
+```
+
+--------------------
+
+### startFilteredReading(...)
+
+```typescript
+startFilteredReading(options: { targetTags: string[] }) => Promise<{ success: boolean; message: string; targetCount: number }>
+```
+
+Starts filtered RFID reading that only notifies when new target tags are found. This method is optimized for scenarios where you need to scan for specific tags and want to avoid the performance bottleneck of constant notifications.
+
+**Performance Benefits:**
+- Only notifies when a target tag is found for the first time
+- Uses efficient HashSet lookups (O(1) complexity)
+- Reduces bridge communication overhead significantly
+- Ideal for bulk scanning scenarios
+
+| Param         | Type                              | Description |
+| ------------- | --------------------------------- | ----------- |
+| **`options`** | <code>{ targetTags: string[] }</code> | Array of target EPC strings to monitor |
+
+**Returns:** <code>Promise&lt;{ success: boolean; message: string; targetCount: number }&gt;</code>
+
+**Example:**
+```typescript
+async startFilteredScan() {
+  const targetTags = [
+    'E2806894000040002000000001',
+    'E2806894000040002000000002',
+    'E2806894000040002000000003'
+  ];
+  
+  try {
+    const result = await RFIDPluginPlugin.startFilteredReading({ targetTags });
+    console.log('Filtered reading started:', result.message);
+    console.log('Monitoring', result.targetCount, 'target tags');
+  } catch (error) {
+    console.error('Error starting filtered scan:', error);
+  }
+}
+```
+
+--------------------
+
+### stopFilteredReading()
+
+```typescript
+stopFilteredReading() => Promise<{ success: boolean; message: string; foundCount: number; targetCount: number }>
+```
+
+Stops filtered RFID reading and returns statistics about the session.
+
+**Returns:** <code>Promise&lt;{ success: boolean; message: string; foundCount: number; targetCount: number }&gt;</code>
+
+**Example:**
+```typescript
+async stopFilteredScan() {
+  try {
+    const result = await RFIDPluginPlugin.stopFilteredReading();
+    console.log('Filtered reading stopped:', result.message);
+    console.log(`Found ${result.foundCount} of ${result.targetCount} target tags`);
+  } catch (error) {
+    console.error('Error stopping filtered scan:', error);
+  }
+}
+```
+
+--------------------
+
+### getFilteredReadingStatus()
+
+```typescript
+getFilteredReadingStatus() => Promise<{ isRunning: boolean; foundCount: number; targetCount: number; success: boolean }>
+```
+
+Gets the current status of the filtered reading session with real-time statistics.
+
+**Returns:** <code>Promise&lt;{ isRunning: boolean; foundCount: number; targetCount: number; success: boolean }&gt;</code>
+
+**Example:**
+```typescript
+async checkFilteredStatus() {
+  try {
+    const status = await RFIDPluginPlugin.getFilteredReadingStatus();
+    console.log('Filtered reading running:', status.isRunning);
+    console.log(`Progress: ${status.foundCount}/${status.targetCount} tags found`);
+  } catch (error) {
+    console.error('Error getting status:', error);
+  }
+}
+```
+
+--------------------
+
+### clearFoundTags()
+
+```typescript
+clearFoundTags() => Promise<{ success: boolean; cleared: number; message: string }>
+```
+
+Clears the internal memory of found tags during filtered reading. This allows the same tags to be detected again as "new" discoveries.
+
+**Returns:** <code>Promise&lt;{ success: boolean; cleared: number; message: string }&gt;</code>
+
+**Example:**
+```typescript
+async resetFoundTags() {
+  try {
+    const result = await RFIDPluginPlugin.clearFoundTags();
+    console.log('Found tags cleared:', result.message);
+    console.log('Cleared', result.cleared, 'tags from memory');
+  } catch (error) {
+    console.error('Error clearing found tags:', error);
   }
 }
 ```
@@ -211,7 +331,8 @@ addListener(eventName: string, listenerFunc: Function) => Promise<void>
 Adds a listener for various RFID events.
 
 Available events:
-- 'tagFound': Emitted when a new tag is found
+- 'tagFound': Emitted when a new tag is found during regular reading
+- 'filteredTagFound': Emitted when a target tag is found during filtered reading
 - 'tagFoundInventory': Emitted when a new tag is found using the inventory callback
 - 'keyEvent': Emitted when any key is pressed/released
 - 'initSuccess': Emitted when the reader is successfully initialized
@@ -221,10 +342,18 @@ Available events:
 
 Event Types:
 ```typescript
-// Tag Found Event
+// Tag Found Event (regular reading)
 interface TagFoundEvent {
   epc: string;
   rssi: string;
+  timestamp?: number;
+}
+
+// Filtered Tag Found Event (filtered reading)
+interface FilteredTagFoundEvent {
+  epc: string;
+  rssi: string;
+  timestamp?: number;
 }
 
 // Tag Found Inventory Event
@@ -276,9 +405,15 @@ export class RFIDService {
       console.log('Trigger released:', data.message);
     });
 
-    // Listen for tags
+    // Listen for tags during regular reading
     RFIDPluginPlugin.addListener('tagFound', (tag: TagFoundEvent) => {
       console.log('Tag found:', tag.epc, 'RSSI:', tag.rssi);
+    });
+
+    // Listen for target tags during filtered reading
+    RFIDPluginPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
+      console.log('Target tag found:', tag.epc, 'RSSI:', tag.rssi);
+      // This will only fire once per unique target tag
     });
 
     // Listen for tags found using the inventory callback
@@ -381,6 +516,97 @@ RFIDPluginPlugin.addListener('triggerReleased', (data) => {
 - Consider implementing error handling for failed read attempts
 - Clean up listeners when they're no longer needed
 
+## Performance Optimization: When to Use Each Reading Method
+
+### Regular Reading (`startReading()`)
+Use this method when:
+- You need to detect all RFID tags in range
+- Real-time tag discovery is more important than performance
+- You're scanning a small number of tags (< 50)
+- You need immediate notification of every tag read
+
+### Filtered Reading (`startFilteredReading()`)
+Use this method when:
+- You're looking for specific target tags from a known list
+- You're scanning large quantities of tags (> 50)
+- Performance and reduced bridge communication is critical
+- You want to avoid duplicate notifications for the same tag
+- You're implementing inventory checking against a database
+
+**Performance Benefits of Filtered Reading:**
+- **Reduced Bridge Overhead**: Only sends notifications for target tags, not every tag detected
+- **Memory Efficient**: Uses HashSet for O(1) lookup performance
+- **Duplicate Prevention**: Each target tag only notifies once until memory is cleared
+- **Scalable**: Performance doesn't degrade with large target lists
+
+## Example: Complete Filtered Reading Workflow
+
+```typescript
+@Injectable({
+  providedIn: 'root'
+})
+export class OptimizedRFIDService {
+  private targetTags: string[] = [];
+  private foundTags: Set<string> = new Set();
+
+  constructor() {
+    this.setupFilteredListeners();
+  }
+
+  private async setupFilteredListeners() {
+    await RFIDPluginPlugin.initReader();
+
+    // Listen only for target tags
+    RFIDPluginPlugin.addListener('filteredTagFound', (tag: FilteredTagFoundEvent) => {
+      console.log('Target tag discovered:', tag.epc);
+      this.foundTags.add(tag.epc);
+      this.processFoundTag(tag);
+    });
+
+    // Setup trigger events for filtered reading
+    RFIDPluginPlugin.addListener('triggerPressed', () => {
+      this.startFilteredScan();
+    });
+
+    RFIDPluginPlugin.addListener('triggerReleased', () => {
+      this.stopFilteredScan();
+    });
+  }
+
+  async startInventoryCheck(expectedTags: string[]) {
+    this.targetTags = expectedTags;
+    this.foundTags.clear();
+    
+    try {
+      const result = await RFIDPluginPlugin.startFilteredReading({ 
+        targetTags: this.targetTags 
+      });
+      console.log(`Started scanning for ${result.targetCount} target tags`);
+    } catch (error) {
+      console.error('Error starting inventory check:', error);
+    }
+  }
+
+  async getInventoryResults() {
+    const status = await RFIDPluginPlugin.getFilteredReadingStatus();
+    const missing = this.targetTags.filter(tag => !this.foundTags.has(tag));
+    
+    return {
+      total: status.targetCount,
+      found: status.foundCount,
+      missing: missing.length,
+      missingTags: missing,
+      foundTags: Array.from(this.foundTags)
+    };
+  }
+
+  private processFoundTag(tag: FilteredTagFoundEvent) {
+    // Custom logic for each found target tag
+    // This will only execute once per unique target tag
+  }
+}
+```
+
 ## Notes
 
 - This plugin is specifically designed for Chainway C72 devices with UHF RFID capabilities
@@ -390,3 +616,4 @@ RFIDPluginPlugin.addListener('triggerReleased', (data) => {
 - All async operations return a Promise with a success indicator and relevant data
 - Event listeners should be set up early in the application lifecycle
 - Remember to free resources when done using the reader
+- For bulk scanning scenarios (>50 tags), use `startFilteredReading()` for optimal performance
