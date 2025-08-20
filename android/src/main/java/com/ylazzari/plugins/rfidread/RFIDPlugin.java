@@ -192,12 +192,12 @@ public class RFIDPlugin extends Plugin {
 
 
             if (targetEpcs.isEmpty()) {
-                call.reject("targetTags array is required and cannot be empty");
-                return;
+                targetEpcs = new ArrayList<>();
             }
 
             targetTags.clear();
             foundTags.clear();
+
             for (Object epc : targetEpcs) {
                 if (epc instanceof String) {
                     targetTags.add((String) epc);
@@ -218,8 +218,9 @@ public class RFIDPlugin extends Plugin {
                         String epc = uhftagInfo.getEPC();
                         String rssi = uhftagInfo.getRssi();
 
-                        if (epc != null && !epc.isEmpty() && !epc.matches("[0]+")) {
-                            if (targetTags.contains(epc) && !foundTags.contains(epc)) {
+
+                        if (epc != null && !epc.isEmpty()) {
+                            if (!foundTags.contains(epc)) {
                                 foundTags.add(epc);
 
                                 JSObject tagData = new JSObject();

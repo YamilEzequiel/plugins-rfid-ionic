@@ -169,7 +169,7 @@ export interface RFIDPluginPlugin {
    * @returns Promise with the result of starting filtered reading
    * @since 1.0.0
    */
-  startFilteredReading(): Promise<{
+  startFilteredReading(options: { targetTags: string[] }): Promise<{
     success: boolean;
     message: string;
     targetCount: number;
