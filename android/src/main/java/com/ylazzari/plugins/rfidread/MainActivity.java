@@ -1,35 +1,55 @@
 package com.ylazzari.plugins.rfidread;
 
-import android.view.KeyEvent;
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.JSObject;
-import com.getcapacitor.Plugin;
-import com.getcapacitor.PluginHandle;
+import android.os.Bundle;
+import android.view.KeyEvent;
+import android.util.Log;
 
 public class MainActivity extends BridgeActivity {
-  @Override
-  public boolean dispatchKeyEvent(KeyEvent event) {
-    int keyCode = event.getKeyCode();
-    android.util.Log.d("RFID", "dispatchKeyEvent keyCode=" + keyCode + " action=" + event.getAction() + " repeat=" + event.getRepeatCount());
-
-    if (keyCode > 0 && (keyCode == 139 || keyCode == 280 || keyCode == 293)) {
-      try {
-        Plugin plugin = getBridge().getPlugin("RFIDUHF").getInstance();
-        if (plugin != null && plugin instanceof RFIDPlugin) {
-          RFIDPlugin rfidPlugin = (RFIDPlugin) plugin;
-          
-          if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-            boolean handled = rfidPlugin.onKeyDown(keyCode, event);
-            if (handled) return true;
-          } else if (event.getAction() == KeyEvent.ACTION_UP) {
-            boolean handled = rfidPlugin.onKeyUp(keyCode, event);
-            if (handled) return true;
-          }
-        }
-      } catch (Exception e) {
-        android.util.Log.e("MainActivity", "Error manejando evento de tecla: " + e.getMessage(), e);
-      }
+    private static final String TAG = "MainActivity";
+    private RFIDPlugin rfidPlugin;
+    
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Log.d(TAG, "MainActivity created");
     }
-    return super.dispatchKeyEvent(event);
-  }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Get reference to the RFID plugin
+        rfidPlugin = (RFIDPlugin) this.getBridge().getPlugin("RFIDUHF").getInstance();
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Forward key events to the RFID plugin
+        if (rfidPlugin != null && (keyCode == 139 || keyCode == 280 || keyCode == 293)) {
+            try {
+                // Call the plugin's handleKeyEvent method
+                rfidPlugin.handleKeyEventFromActivity(keyCode, true);
+                return true;
+            } catch (Exception e) {
+                Log.e(TAG, "Error forwarding key down event: " + e.getMessage(), e);
+            }
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        // Forward key events to the RFID plugin
+        if (rfidPlugin != null && (keyCode == 139 || keyCode == 280 || keyCode == 293)) {
+            try {
+                // Call the plugin's handleKeyEvent method
+                rfidPlugin.handleKeyEventFromActivity(keyCode, false);
+                return true;
+            } catch (Exception e) {
+                Log.e(TAG, "Error forwarding key up event: " + e.getMessage(), e);
+            }
+        }
+        return super.onKeyUp(keyCode, event);
+    }
 }
+

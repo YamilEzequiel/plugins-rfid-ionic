@@ -39,6 +39,8 @@ public class RFIDPlugin extends Plugin {
 
     private Set<String> foundTags = new HashSet<>();
     private Set<String> targetTags = new HashSet<>();
+    private long lastNotificationTime = 0;
+    private static final long NOTIFICATION_THROTTLE = 10; // 10ms minimum between notifications
 
     // Constantes para configuración
     private static final int DEFAULT_POWER = 15;
@@ -211,15 +213,15 @@ public class RFIDPlugin extends Plugin {
 
             clearBufferInternal();
 
-            mReader.setInventoryCallback(new IUHFInventoryCallback() {
+                        mReader.setInventoryCallback(new IUHFInventoryCallback() {
                 @Override
                 public void callback(UHFTAGInfo uhftagInfo) {
                     if (uhftagInfo != null && isFilteredInventoryRunning) {
                         String epc = uhftagInfo.getEPC();
                         String rssi = uhftagInfo.getRssi();
 
-
-                        if (epc != null && !epc.isEmpty()) {
+                                                if (epc != null && !epc.isEmpty() && !epc.matches("[0]+")) {
+                            // Simple duplicate check without synchronization for speed
                             if (!foundTags.contains(epc)) {
                                 foundTags.add(epc);
 
@@ -228,7 +230,7 @@ public class RFIDPlugin extends Plugin {
                                 tagData.put("rssi", rssi);
                                 tagData.put("timestamp", System.currentTimeMillis());
 
-                                Log.d(TAG, "New target tag found: " + epc + " RSSI: " + rssi);
+                                // Direct notification for speed - similar to BuscarTags
                                 notifyListeners("filteredTagFound", tagData);
                             }
                         }
@@ -261,19 +263,12 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+        @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void stopFilteredReading(PluginCall call) {
         try {
             Log.d(TAG, "stopFilteredReading called");
 
-            if (!isFilteredInventoryRunning) {
-                JSObject ret = new JSObject();
-                ret.put("success", false);
-                ret.put("message", "Filtered reader is not running");
-                call.resolve(ret);
-                return;
-            }
-
+            // Set flags to false immediately to stop callbacks
             isFilteredInventoryRunning = false;
             loopStarted = false;
 
@@ -282,9 +277,11 @@ public class RFIDPlugin extends Plugin {
                 executorService = null;
             }
 
+            boolean success = false;
             if (mReader != null) {
-                boolean success = mReader.stopInventory();
+                success = mReader.stopInventory();
 
+                // Faster cleanup - similar to BuscarTags
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
@@ -292,27 +289,17 @@ public class RFIDPlugin extends Plugin {
                 }
 
                 clearBufferInternal();
-
-                try {
-                    mReader.free();
-                } catch (Exception e) {
-                    Log.w(TAG, "Error freeing resources: " + e.getMessage());
-                }
-
-                JSObject ret = new JSObject();
-                ret.put("success", success);
-                ret.put("message", success ? "Filtered reading stopped successfully" : "Error stopping filtered reading");
-                ret.put("foundCount", foundTags.size());
-                ret.put("targetCount", targetTags.size());
-                call.resolve(ret);
-
-                Log.d(TAG, "Filtered reading stopped successfully. Found " + foundTags.size() + " of " + targetTags.size() + " target tags");
-            } else {
-                JSObject ret = new JSObject();
-                ret.put("success", false);
-                ret.put("message", "Reader not available");
-                call.resolve(ret);
+                lastNotificationTime = 0;
             }
+
+            JSObject ret = new JSObject();
+            ret.put("success", success);
+            ret.put("message", success ? "Filtered reading stopped successfully" : "Error stopping filtered reading");
+            ret.put("foundCount", foundTags.size());
+            call.resolve(ret);
+
+            Log.d(TAG, "Filtered reading stopped. Found " + foundTags.size() + " tags total");
+
         } catch (Exception e) {
             Log.e(TAG, "Error in stopFilteredReading: " + e.getMessage(), e);
             isFilteredInventoryRunning = false;
@@ -344,6 +331,7 @@ public class RFIDPlugin extends Plugin {
         try {
             int previousSize = foundTags.size();
             foundTags.clear();
+            lastNotificationTime = 0;
 
             JSObject ret = new JSObject();
             ret.put("success", true);
@@ -636,72 +624,75 @@ public class RFIDPlugin extends Plugin {
         }
     }
 
-    // 📌 Método para capturar teclas presionadas con debounce y control de repetición
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // Solo procesar códigos de teclas específicos del escáner RFID
-        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
-            long currentTime = System.currentTimeMillis();
-
-            // Auto-reset si la tecla ha estado presionada por mucho tiempo
-            if (isKeyPressed && (currentTime - lastKeyEventTime > KEY_TIMEOUT)) {
-                isKeyPressed = false;
-                JSObject resetData = new JSObject();
-                resetData.put("message", "Auto-reset: Gatillo liberado automáticamente");
-                resetData.put("reason", "timeout");
-                mainHandler.post(() -> {
-                    notifyListeners("triggerAutoReset", resetData);
-                });
-            }
-
-            // Ignorar eventos repetitivos (cuando se mantiene presionada la tecla)
-            if (event.getRepeatCount() > 0) {
-                return true; // Consumir el evento pero no procesarlo
-            }
-
-            // Aplicar debounce para evitar eventos múltiples rápidos
-            if (currentTime - lastKeyEventTime < KEY_DEBOUNCE_DELAY) {
-                return true; // Consumir el evento pero no procesarlo
-            }
-
-            // Solo procesar si la tecla no estaba ya presionada
-            if (!isKeyPressed) {
-                isKeyPressed = true;
-                lastKeyEventTime = currentTime;
-
-                JSObject data = new JSObject();
-                data.put("message", "Gatillo presionado");
-                data.put("keyCode", keyCode);
-                data.put("timestamp", currentTime);
-
-                // Notificar de manera asíncrona para mejor rendimiento
-                notifyListeners("triggerPressed", data);
-            }
-            return true; // Consumir el evento
+    // 📌 Método para manejar eventos de tecla desde la Activity principal
+    @PluginMethod
+    public void handleKeyEvent(PluginCall call) {
+        try {
+            int keyCode = call.getInt("keyCode", 0);
+            boolean isPressed = call.getBoolean("isPressed", false);
+            handleKeyEventFromActivity(keyCode, isPressed);
+            call.resolve(new JSObject().put("processed", true));
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling key event: " + e.getMessage(), e);
+            call.reject("Error handling key event", e);
         }
-        return false; // No consumir eventos de otras teclas
     }
 
-    // 📌 Método para capturar teclas liberadas con control mejorado
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        // Solo procesar códigos de teclas específicos del escáner RFID
-        if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
+    // 📌 Método público para ser llamado directamente desde MainActivity
+    public void handleKeyEventFromActivity(int keyCode, boolean isPressed) {
+        try {
             long currentTime = System.currentTimeMillis();
 
-            // Solo procesar si la tecla estaba presionada
-            if (isKeyPressed) {
-                isKeyPressed = false;
-                lastKeyEventTime = currentTime;
+            // Solo procesar códigos de teclas específicos del escáner RFID
+            if (keyCode == 139 || keyCode == 280 || keyCode == 293) {
 
-                JSObject data = new JSObject();
-                data.put("message", "Gatillo liberado");
-                data.put("keyCode", keyCode);
-                data.put("timestamp", currentTime);
+                if (isPressed) {
+                    // Auto-reset si la tecla ha estado presionada por mucho tiempo
+                    if (isKeyPressed && (currentTime - lastKeyEventTime > KEY_TIMEOUT)) {
+                        isKeyPressed = false;
+                        JSObject resetData = new JSObject();
+                        resetData.put("message", "Auto-reset: Gatillo liberado automáticamente");
+                        resetData.put("reason", "timeout");
+                        notifyListeners("triggerAutoReset", resetData);
+                    }
 
-                notifyListeners("triggerReleased", data);
+                    // Aplicar debounce para evitar eventos múltiples rápidos
+                    if (currentTime - lastKeyEventTime < KEY_DEBOUNCE_DELAY) {
+                        return;
+                    }
+
+                    // Solo procesar si la tecla no estaba ya presionada
+                    if (!isKeyPressed) {
+                        isKeyPressed = true;
+                        lastKeyEventTime = currentTime;
+
+                        JSObject data = new JSObject();
+                        data.put("message", "Gatillo presionado");
+                        data.put("keyCode", keyCode);
+                        data.put("timestamp", currentTime);
+
+                        Log.d(TAG, "Key pressed: " + keyCode);
+                        notifyListeners("triggerPressed", data);
+                    }
+                } else {
+                    // Solo procesar si la tecla estaba presionada
+                    if (isKeyPressed) {
+                        isKeyPressed = false;
+                        lastKeyEventTime = currentTime;
+
+                        JSObject data = new JSObject();
+                        data.put("message", "Gatillo liberado");
+                        data.put("keyCode", keyCode);
+                        data.put("timestamp", currentTime);
+
+                        Log.d(TAG, "Key released: " + keyCode);
+                        notifyListeners("triggerReleased", data);
+                    }
+                }
             }
-            return true; 
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling key event from activity: " + e.getMessage(), e);
         }
-        return false; 
     }
 }
 
